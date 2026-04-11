@@ -1,12 +1,46 @@
 import { randomUUID } from 'crypto';
 import type { FastifyInstance } from 'fastify';
+import { z } from 'zod';
 import { parseCSV } from '../utils/csvParser.js';
 import { uploadToS3 } from '../utils/s3.js';
 import { profileColumns, coerceValue } from '../semantic/profiler.js';
 import type { ColumnProfile } from '../semantic/profiler.js';
+import { enrichProfilerColumns, generateUnderstandingCard } from '../semantic/enricher.js';
+import {
+  buildColumnEmbeddingText,
+  embedTextsBatched,
+  insertSchemaEmbeddings,
+} from '../semantic/embedder.js';
+import { mergeAllProfilerColumns, profilerToEnricherInput } from '../semantic/mergeProfile.js';
 
 /** Maximum accepted CSV file size: 50 MB */
 const MAX_FILE_SIZE = 50 * 1024 * 1024;
+
+const semanticPatchBodySchema = z.object({
+  corrections: z
+    .array(
+      z.object({
+        columnName: z.string(),
+        newSemanticType: z.enum([
+          'amount',
+          'date',
+          'category',
+          'identifier',
+          'flag',
+          'text',
+        ]),
+        newBusinessLabel: z.string(),
+        newDescription: z.string(),
+      }),
+    )
+    .min(1),
+});
+
+type StoredSchemaJson = {
+  tableName: string;
+  columns: ColumnProfile[];
+  understandingCard?: string;
+};
 
 /** Allowed MIME types for CSV uploads */
 const CSV_MIMETYPES = new Set([
@@ -139,8 +173,145 @@ export default async function datasetsRoutes(fastify: FastifyInstance) {
     },
   );
 
+  // PATCH /api/datasets/:datasetId/semantic — user corrections + re-embed (§4.2)
+  fastify.patch<{
+    Params: { datasetId: string };
+    Body: z.infer<typeof semanticPatchBodySchema>;
+  }>('/datasets/:datasetId/semantic', async (request, reply) => {
+    const parsedBody = semanticPatchBodySchema.safeParse(request.body);
+    if (!parsedBody.success) {
+      return reply.status(400).send({
+        error: 'Invalid body',
+        details: parsedBody.error.flatten(),
+      });
+    }
+
+    const { datasetId } = request.params;
+    const { corrections } = parsedBody.data;
+
+    const ownerCheck = await fastify.db.query(
+      'SELECT id FROM datasets WHERE id = $1 AND user_id = $2',
+      [datasetId, request.userId],
+    );
+    if (ownerCheck.rowCount === 0) {
+      return reply.status(404).send({ error: 'Dataset not found' });
+    }
+
+    const { rows: semRows } = await fastify.db.query<{
+      id: string;
+      schema_json: unknown;
+      understanding_card: string | null;
+      updated_at: string;
+    }>(
+      `SELECT id, schema_json, understanding_card, updated_at
+       FROM semantic_states WHERE dataset_id = $1`,
+      [datasetId],
+    );
+
+    if (semRows.length === 0) {
+      return reply.status(404).send({ error: 'Semantic state not found' });
+    }
+
+    const sem = semRows[0];
+    const rawSchema = sem.schema_json as Record<string, unknown> | null;
+    if (
+      !rawSchema ||
+      typeof rawSchema.tableName !== 'string' ||
+      !Array.isArray(rawSchema.columns)
+    ) {
+      return reply.status(500).send({ error: 'Stored semantic state is invalid' });
+    }
+
+    const schema = {
+      tableName: rawSchema.tableName,
+      columns: rawSchema.columns as ColumnProfile[],
+      understandingCard:
+        typeof rawSchema.understandingCard === 'string' ? rawSchema.understandingCard : undefined,
+    };
+    const columnByName = new Map(schema.columns.map((c) => [c.columnName, c]));
+
+    for (const c of corrections) {
+      const col = columnByName.get(c.columnName);
+      if (!col) {
+        return reply.status(400).send({ error: `Unknown column: ${c.columnName}` });
+      }
+      col.semanticType = c.newSemanticType;
+      col.businessLabel = c.newBusinessLabel;
+      col.description = c.newDescription;
+    }
+
+    const updatedSchema: StoredSchemaJson = {
+      tableName: schema.tableName,
+      columns: schema.columns,
+      understandingCard: schema.understandingCard ?? sem.understanding_card ?? undefined,
+    };
+
+    let embeddingVectors: number[][];
+    try {
+      const texts = updatedSchema.columns.map((col) => buildColumnEmbeddingText(col));
+      embeddingVectors = await embedTextsBatched(texts);
+    } catch (err) {
+      fastify.log.error({ err }, 'Re-embedding failed after semantic PATCH');
+      return reply.status(502).send({
+        error: 'Re-embedding failed',
+        message: err instanceof Error ? err.message : String(err),
+      });
+    }
+
+    const embedRows = updatedSchema.columns.map((col, i) => ({
+      columnName: col.columnName,
+      embeddingText: buildColumnEmbeddingText(col),
+      embedding: embeddingVectors[i]!,
+    }));
+
+    const client = await fastify.db.connect();
+    try {
+      await client.query('BEGIN');
+
+      await client.query(`DELETE FROM schema_embeddings WHERE dataset_id = $1::uuid`, [datasetId]);
+
+      await insertSchemaEmbeddings(client, datasetId, embedRows);
+
+      const { rows } = await client.query<{
+        id: string;
+        updated_at: string;
+      }>(
+        `UPDATE semantic_states
+         SET schema_json = $2::jsonb,
+             understanding_card = $3,
+             is_user_corrected = true,
+             updated_at = NOW()
+         WHERE dataset_id = $1::uuid
+         RETURNING id, updated_at`,
+        [
+          datasetId,
+          JSON.stringify(updatedSchema),
+          updatedSchema.understandingCard ?? null,
+        ],
+      );
+
+      await client.query('COMMIT');
+
+      const row = rows[0]!;
+      return reply.send({
+        id: row.id,
+        datasetId,
+        schemaJson: updatedSchema,
+        understandingCard: updatedSchema.understandingCard ?? null,
+        isUserCorrected: true,
+        updatedAt: row.updated_at,
+      });
+    } catch (err) {
+      await client.query('ROLLBACK');
+      fastify.log.error({ err }, 'PATCH semantic transaction failed');
+      throw err;
+    } finally {
+      client.release();
+    }
+  });
+
   // ── POST /api/datasets/upload ──────────────────────────────────────────────
-  // Receive a redacted CSV → parse → profile → S3 → dynamic table → datasets row
+  // multipart → parse → profile → enrich + embed → S3 → dynamic table → datasets + semantic + embeddings
   fastify.post('/datasets/upload', async (request, reply) => {
     // 1. Read the multipart file
     const data = await request.file();
@@ -196,12 +367,45 @@ export default async function datasetsRoutes(fastify: FastifyInstance) {
       return reply.status(502).send({ error: 'File storage unavailable' });
     }
 
-    // 7. DB transaction: CREATE dynamic table + bulk INSERT rows + datasets + semantic_states
+    // 7. Groq enrichment + HF embeddings (Phase 2C) — run before DDL so failed LLM calls leave no DB artifacts
+    let enrichedColumns: ColumnProfile[];
+    let understandingCard: string;
+    let embeddingVectors: number[][];
+    try {
+      const enrichInput = profiles.map(profilerToEnricherInput);
+      const enriched = await enrichProfilerColumns(enrichInput);
+      enrichedColumns = mergeAllProfilerColumns(profiles, enriched);
+      understandingCard = await generateUnderstandingCard(enriched, filename);
+      const texts = enrichedColumns.map((col) => buildColumnEmbeddingText(col));
+      embeddingVectors = await embedTextsBatched(texts);
+      if (embeddingVectors.length !== enrichedColumns.length) {
+        throw new Error('Embedding batch size mismatch');
+      }
+    } catch (err) {
+      fastify.log.error({ err }, 'Semantic enrichment / embedding failed');
+      return reply.status(502).send({
+        error: 'Semantic enrichment failed',
+        message: err instanceof Error ? err.message : String(err),
+      });
+    }
+
+    const embedRows = enrichedColumns.map((col, i) => ({
+      columnName: col.columnName,
+      embeddingText: buildColumnEmbeddingText(col),
+      embedding: embeddingVectors[i]!,
+    }));
+
+    const schemaJson: StoredSchemaJson = {
+      tableName,
+      columns: enrichedColumns,
+      understandingCard,
+    };
+
+    // 8. DB transaction: CREATE dynamic table + bulk INSERT + datasets + semantic_states + schema_embeddings
     const client = await fastify.db.connect();
     try {
       await client.query('BEGIN');
 
-      // CREATE TABLE dataset_<uuid_no_hyphens>
       const columnDDL = profiles
         .map((p) => `${quotedIdent(p.columnName)} ${p.postgresType}`)
         .join(',\n  ');
@@ -213,13 +417,10 @@ export default async function datasetsRoutes(fastify: FastifyInstance) {
         )
       `);
 
-      // Grant SELECT to readonly_agent (used by pipeline dbExecutor)
       await client.query(`GRANT SELECT ON "${tableName}" TO readonly_agent`);
 
-      // Bulk INSERT all rows
       await bulkInsertRows(client, tableName, profiles, parsed.rows);
 
-      // INSERT into datasets
       const datasetResult = await client.query<{
         id: string;
         name: string;
@@ -243,21 +444,17 @@ export default async function datasetsRoutes(fastify: FastifyInstance) {
         ],
       );
 
-      // INSERT into semantic_states
-      const schemaJson = {
-        tableName,
-        columns: profiles,
-      };
-
       const semanticResult = await client.query<{
         id: string;
         updated_at: string;
       }>(
-        `INSERT INTO semantic_states (dataset_id, schema_json)
-         VALUES ($1, $2)
+        `INSERT INTO semantic_states (dataset_id, schema_json, understanding_card)
+         VALUES ($1, $2::jsonb, $3)
          RETURNING id, updated_at`,
-        [datasetId, JSON.stringify(schemaJson)],
+        [datasetId, JSON.stringify(schemaJson), understandingCard],
       );
+
+      await insertSchemaEmbeddings(client, datasetId, embedRows);
 
       await client.query('COMMIT');
 
@@ -266,25 +463,22 @@ export default async function datasetsRoutes(fastify: FastifyInstance) {
 
       return reply.send({
         dataset: {
-          id: ds.id,
-          name: ds.name,
-          rowCount: ds.row_count,
-          columnCount: ds.column_count,
-          isDemo: ds.is_demo,
-          createdAt: ds.created_at,
+          id: ds!.id,
+          name: ds!.name,
+          rowCount: ds!.row_count,
+          columnCount: ds!.column_count,
+          isDemo: ds!.is_demo,
+          createdAt: ds!.created_at,
         },
         semanticState: {
-          id: ss.id,
+          id: ss!.id,
           datasetId,
           schemaJson,
-          // understandingCard is null until Phase 2B enricher runs
-          understandingCard: null,
+          understandingCard,
           isUserCorrected: false,
-          updatedAt: ss.updated_at,
+          updatedAt: ss!.updated_at,
         },
-        // understandingCard populated by enricher in Phase 2B
-        understandingCard: null,
-        // piiSummary is tracked client-side; server confirms receipt
+        understandingCard,
         piiSummary: {
           redactedColumns: [],
           totalRedactions: 0,
