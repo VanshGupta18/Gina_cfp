@@ -11,6 +11,7 @@ import usersRoutes from './routes/users.js';
 import datasetsRoutes from './routes/datasets.js';
 import conversationsRoutes from './routes/conversations.js';
 import messagesRoutes from './routes/messages.js';
+import queryRoutes from './routes/query.js';
 
 const ssePlugin = fastifySse as unknown as FastifyPluginAsync;
 
@@ -34,6 +35,7 @@ async function main() {
       await api.register(datasetsRoutes);
       await api.register(conversationsRoutes);
       await api.register(messagesRoutes);
+      await api.register(queryRoutes);
     },
     { prefix: '/api' },
   );
