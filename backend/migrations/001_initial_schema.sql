@@ -1,5 +1,5 @@
 -- Talk to Data — Initial Schema
--- Run with: psql $DATABASE_URL -f migrations/001_initial_schema.sql
+-- Run with: npm run migrate (from backend/ — loads .env) or: psql "$DATABASE_URL" -f migrations/001_initial_schema.sql
 -- Requires Supabase PostgreSQL with pgvector extension enabled
 -- Enable pgvector via Supabase Dashboard → Database → Extensions before running
 
