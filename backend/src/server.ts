@@ -22,23 +22,19 @@ async function main() {
   await app.register(ssePlugin);
   await app.register(dbPlugin);
 
-  // TODO (Person B — Phase 1): register authPlugin here before routes
-  // await app.register(authPlugin);
-
   app.get('/health', async () => ({ status: 'ok' }));
 
+  // All /api/* routes are protected by the auth plugin via Fastify's scoped plugin system
   await app.register(
     async (api) => {
       await api.register(authPlugin);
       await api.register(usersRoutes);
+      await api.register(datasetsRoutes);
+      await api.register(conversationsRoutes);
+      await api.register(messagesRoutes);
     },
     { prefix: '/api' },
   );
-
-  // API routes
-  await app.register(datasetsRoutes, { prefix: '/api' });
-  await app.register(conversationsRoutes, { prefix: '/api' });
-  await app.register(messagesRoutes, { prefix: '/api' });
 
   await app.listen({ port: env.PORT, host: '0.0.0.0' });
 }
