@@ -110,8 +110,8 @@ export default async function datasetsRoutes(fastify: FastifyInstance) {
     }>(
       `SELECT id, name, row_count, column_count, is_demo, demo_slug, created_at
        FROM datasets
-       WHERE user_id = $1
-       ORDER BY created_at DESC`,
+       WHERE user_id = $1 OR is_demo = true
+       ORDER BY is_demo DESC, created_at DESC`,
       [request.userId],
     );
 

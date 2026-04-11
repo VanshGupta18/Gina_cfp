@@ -44,7 +44,7 @@ export function validateSql(sql: string, allowedTableNames: string[]): SqlValida
     return { valid: false, reason: 'Multiple statements are not allowed' };
   }
 
-  let parsed: ReturnType<Parser['parse']>;
+  let parsed: ReturnType<typeof parser.parse>;
   try {
     parsed = parser.parse(trimmed, PG_OPT);
   } catch (e) {
