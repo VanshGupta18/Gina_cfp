@@ -5,6 +5,8 @@ import cors from '@fastify/cors';
 import multipart from '@fastify/multipart';
 import fastifySse from '@fastify/sse';
 import dbPlugin from './plugins/db.js';
+import authPlugin from './plugins/auth.js';
+import usersRoutes from './routes/users.js';
 
 const ssePlugin = fastifySse as unknown as FastifyPluginAsync;
 
@@ -17,6 +19,14 @@ async function main() {
   await app.register(dbPlugin);
 
   app.get('/health', async () => ({ status: 'ok' }));
+
+  await app.register(
+    async (api) => {
+      await api.register(authPlugin);
+      await api.register(usersRoutes);
+    },
+    { prefix: '/api' },
+  );
 
   await app.listen({ port: env.PORT, host: '0.0.0.0' });
 }
