@@ -2,7 +2,7 @@ import type { Pool, PoolClient } from 'pg';
 import pgvector from 'pgvector/pg';
 import { env } from '../config/env.js';
 import { hfPool } from '../ratelimit/keyPool.js';
-const HF_INFERENCE = 'https://api-inference.huggingface.co/models';
+const HF_INFERENCE = 'https://router.huggingface.co/hf-inference/models';
 
 /** Minimal fields for embedding text (profiler + semantic layers both satisfy this). */
 export type EmbeddingTextSource = {
@@ -26,7 +26,8 @@ export async function embedTexts(texts: string[]): Promise<number[][]> {
   if (texts.length === 0) return [];
 
   const model = env.EMBEDDING_HF_MODEL;
-  const url = `${HF_INFERENCE}/${encodeURIComponent(model)}`;
+  const encodedModel = model.split('/').map(encodeURIComponent).join('/');
+  const url = `${HF_INFERENCE}/${encodedModel}`;
   const key = hfPool.next();
 
   const res = await fetch(url, {
@@ -111,7 +112,9 @@ export async function insertSchemaEmbeddings(
 ): Promise<void> {
   if (rows.length === 0) return;
 
-  if ('connect' in db && typeof (db as Pool).connect === 'function') {
+  // PoolClient has a `release()` method; Pool does not.
+  // Both have `connect`, so we must use `release` to distinguish them.
+  if (!('release' in db)) {
     const pool = db as Pool;
     const client = await pool.connect();
     try {
