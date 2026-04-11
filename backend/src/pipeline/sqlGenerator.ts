@@ -193,15 +193,15 @@ export async function generateSql(params: {
     return null;
   };
 
-  const ec2 = await tierEc2(prompt);
+  const ec2 = await tierEc2(prompt).catch(() => null);
   const a = tryTier(ec2, 'ec2');
   if (a) return a;
 
-  const hf = await tierHf(prompt);
+  const hf = await tierHf(prompt).catch(() => null);
   const b = tryTier(hf, 'hf');
   if (b) return b;
 
-  const gq = await tierGroqMaverick(prompt);
+  const gq = await tierGroqMaverick(prompt).catch(() => null);
   const c = tryTier(gq, 'groq_maverick');
   if (c) return c;
 

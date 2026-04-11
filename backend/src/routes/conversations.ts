@@ -8,7 +8,7 @@ export default async function conversationsRoutes(fastify: FastifyInstance) {
       const { datasetId } = request.params;
 
       const ownerCheck = await fastify.db.query(
-        'SELECT id FROM datasets WHERE id = $1 AND user_id = $2',
+        'SELECT id FROM datasets WHERE id = $1 AND (user_id = $2 OR is_demo = true)',
         [datasetId, request.userId],
       );
       if (ownerCheck.rowCount === 0) {
@@ -50,7 +50,7 @@ export default async function conversationsRoutes(fastify: FastifyInstance) {
       const { datasetId } = request.params;
 
       const ownerCheck = await fastify.db.query(
-        'SELECT id FROM datasets WHERE id = $1 AND user_id = $2',
+        'SELECT id FROM datasets WHERE id = $1 AND (user_id = $2 OR is_demo = true)',
         [datasetId, request.userId],
       );
       if (ownerCheck.rowCount === 0) {
