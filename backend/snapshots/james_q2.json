@@ -1,0 +1,19 @@
+{
+  "matchQuestion": "How much did I spend last month?",
+  "datasetSlug": "james",
+  "outputPayload": {
+    "narrative": "Placeholder james Q2 (Person A: replace with scripted demo narrative).",
+    "chartType": "table",
+    "chartData": { "labels": [], "datasets": [] },
+    "keyFigure": "£0",
+    "citationChips": [],
+    "sql": "SELECT 1",
+    "secondarySql": null,
+    "rowCount": 0,
+    "confidenceScore": 80,
+    "followUpSuggestions": ["Show this year", "Break down by category", "Compare months"],
+    "autoInsights": [],
+    "cacheHit": false,
+    "snapshotUsed": true
+  }
+}

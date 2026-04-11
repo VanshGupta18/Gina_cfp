@@ -1,0 +1,23 @@
+{
+  "matchQuestion": "What was my total spending?",
+  "datasetSlug": "sunita",
+  "outputPayload": {
+    "narrative": "Placeholder total-spend snapshot for sunita (Person A: replace with final copy).",
+    "chartType": "big_number",
+    "chartData": { "value": 142400, "label": "total_spend" },
+    "keyFigure": "£142,400",
+    "citationChips": ["amount"],
+    "sql": "SELECT SUM(amount) AS total FROM dataset_demo_sunita",
+    "secondarySql": null,
+    "rowCount": 1,
+    "confidenceScore": 92,
+    "followUpSuggestions": [
+      "Break spending down by category",
+      "Show monthly trend",
+      "Compare green vs non-green spend"
+    ],
+    "autoInsights": [],
+    "cacheHit": false,
+    "snapshotUsed": true
+  }
+}

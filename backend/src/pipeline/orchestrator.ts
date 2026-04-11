@@ -21,8 +21,18 @@ import { executeReadOnlySql, type ResultRow } from './dbExecutor.js';
 import { runSecondaryQuery } from './secondaryQuery.js';
 import { detectAutoInsights, computeConfidence, selectChartType, type ChartType } from './autoInsight.js';
 import { generateNarration } from './narrator.js';
+import { getSnapshotMode } from '../snapshots/snapshotMode.js';
+import {
+  defaultSimulatedSteps,
+  findMatchingSnapshot,
+  SIMULATED_STEP_DELAY_MS,
+} from '../snapshots/snapshotStore.js';
 
 export type { QueryResultPayload };
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
 export type QueryOrchestrationInput = {
   fastify: FastifyInstance;
@@ -264,10 +274,11 @@ export async function runQueryOrchestration(input: QueryOrchestrationInput): Pro
 
   const load = await fastify.db.query<{
     data_table_name: string;
+    demo_slug: string | null;
     schema_json: unknown;
     understanding_card: string | null;
   }>(
-    `SELECT d.data_table_name, ss.schema_json, ss.understanding_card
+    `SELECT d.data_table_name, d.demo_slug, ss.schema_json, ss.understanding_card
      FROM datasets d
      JOIN semantic_states ss ON ss.dataset_id = d.id
      WHERE d.id = $1::uuid AND (d.user_id = $2::uuid OR d.is_demo = true)`,
@@ -278,6 +289,41 @@ export async function runQueryOrchestration(input: QueryOrchestrationInput): Pro
     await sendError(reply, 'Dataset not found or no semantic state', false);
     reply.sse.close();
     return;
+  }
+
+  // Phase 6 — demo snapshots (bypass pipeline; Person A fills JSON under backend/snapshots/)
+  if (getSnapshotMode()) {
+    const snap = findMatchingSnapshot(load.rows[0]!.demo_slug, question);
+    if (snap) {
+      const steps =
+        snap.simulatedSteps && snap.simulatedSteps.length > 0
+          ? snap.simulatedSteps
+          : defaultSimulatedSteps(snap.outputPayload.rowCount);
+      for (const data of steps) {
+        await sendStep(reply, data as Record<string, unknown>);
+        await delay(SIMULATED_STEP_DELAY_MS);
+      }
+      const out: QueryResultPayload = {
+        ...snap.outputPayload,
+        messageId: randomUUID(),
+        snapshotUsed: true,
+        cacheHit: false,
+      };
+      await sendResult(reply, out);
+      reply.sse.close();
+      try {
+        await persistMessages(fastify, {
+          conversationId: input.conversationId,
+          question,
+          narrative: out.narrative,
+          outputPayload: out,
+        });
+        await setConversationTitle(fastify, input.conversationId, question);
+      } catch (e) {
+        fastify.log.error({ err: e }, 'persistMessages snapshot');
+      }
+      return;
+    }
   }
 
   const cached = await getResponseCache(fastify.db, datasetId, question);

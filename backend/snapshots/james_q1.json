@@ -1,0 +1,22 @@
+{
+  "matchQuestion": "What are my largest expense categories?",
+  "datasetSlug": "james",
+  "outputPayload": {
+    "narrative": "Placeholder james Q1 (Person A: replace with scripted demo narrative).",
+    "chartType": "bar",
+    "chartData": {
+      "labels": ["A", "B"],
+      "datasets": [{ "label": "amount", "data": [100, 80] }]
+    },
+    "keyFigure": "£180",
+    "citationChips": ["category", "amount"],
+    "sql": "SELECT 1",
+    "secondarySql": null,
+    "rowCount": 2,
+    "confidenceScore": 85,
+    "followUpSuggestions": ["Show trend over time", "Compare to last quarter", "Top vendors"],
+    "autoInsights": [],
+    "cacheHit": false,
+    "snapshotUsed": true
+  }
+}

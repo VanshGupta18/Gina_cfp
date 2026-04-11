@@ -1,0 +1,19 @@
+{
+  "matchQuestion": "What is the total donation amount?",
+  "datasetSlug": "donations",
+  "outputPayload": {
+    "narrative": "Placeholder donations Q2 (Person A: replace with scripted demo narrative).",
+    "chartType": "big_number",
+    "chartData": { "value": 250000, "label": "total" },
+    "keyFigure": "£250,000",
+    "citationChips": ["amount"],
+    "sql": "SELECT SUM(amount) FROM dataset_demo_donations",
+    "secondarySql": null,
+    "rowCount": 1,
+    "confidenceScore": 90,
+    "followUpSuggestions": ["Top donors", "Monthly trend", "By region"],
+    "autoInsights": [],
+    "cacheHit": false,
+    "snapshotUsed": true
+  }
+}

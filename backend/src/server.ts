@@ -12,11 +12,15 @@ import datasetsRoutes from './routes/datasets.js';
 import conversationsRoutes from './routes/conversations.js';
 import messagesRoutes from './routes/messages.js';
 import queryRoutes from './routes/query.js';
+import snapshotRoutes from './routes/snapshot.js';
+import { loadDemoSnapshots } from './snapshots/snapshotStore.js';
 
 const ssePlugin = fastifySse as unknown as FastifyPluginAsync;
 
 async function main() {
   const app = Fastify({ logger: true });
+
+  await loadDemoSnapshots(app.log);
 
   // Core plugins
   await app.register(cors, { origin: true });
@@ -36,6 +40,7 @@ async function main() {
       await api.register(conversationsRoutes);
       await api.register(messagesRoutes);
       await api.register(queryRoutes);
+      await api.register(snapshotRoutes);
     },
     { prefix: '/api' },
   );

@@ -1,0 +1,22 @@
+{
+  "matchQuestion": "Which causes received the most funding?",
+  "datasetSlug": "donations",
+  "outputPayload": {
+    "narrative": "Placeholder donations Q1 (Person A: replace with scripted demo narrative).",
+    "chartType": "bar",
+    "chartData": {
+      "labels": ["Cause A", "Cause B"],
+      "datasets": [{ "label": "funding", "data": [5000, 4200] }]
+    },
+    "keyFigure": "£9,200",
+    "citationChips": ["cause", "amount"],
+    "sql": "SELECT 1",
+    "secondarySql": null,
+    "rowCount": 2,
+    "confidenceScore": 88,
+    "followUpSuggestions": ["Show year over year", "Geographic breakdown", "Average gift size"],
+    "autoInsights": [],
+    "cacheHit": false,
+    "snapshotUsed": true
+  }
+}
