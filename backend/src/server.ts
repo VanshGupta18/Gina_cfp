@@ -5,6 +5,7 @@ import cors from '@fastify/cors';
 import multipart from '@fastify/multipart';
 import fastifySse from '@fastify/sse';
 import dbPlugin from './plugins/db.js';
+import s3Plugin from './plugins/s3.js';
 import authPlugin from './plugins/auth.js';
 import usersRoutes from './routes/users.js';
 import datasetsRoutes from './routes/datasets.js';
@@ -21,6 +22,7 @@ async function main() {
   await app.register(multipart);
   await app.register(ssePlugin);
   await app.register(dbPlugin);
+  await app.register(s3Plugin);
 
   app.get('/health', async () => ({ status: 'ok' }));
 

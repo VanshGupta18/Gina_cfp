@@ -29,7 +29,7 @@
   },
   "devDependencies": {
     "@types/node": "^22",
-    "@types/papaparse": "^5",
+    "@types/papaparse": "^5.5.2",
     "@types/pg": "^8",
     "tsx": "^4",
     "typescript": "^5"
