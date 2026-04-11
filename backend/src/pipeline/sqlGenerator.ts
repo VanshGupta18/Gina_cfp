@@ -105,8 +105,7 @@ async function tierEc2(prompt: string): Promise<string | null> {
 
 async function tierHf(prompt: string): Promise<string | null> {
   const model = env.SQLCODER_HF_MODEL;
-  const encodedModel = model.split('/').map(encodeURIComponent).join('/');
-  const url = `https://router.huggingface.co/hf-inference/models/${encodedModel}`;
+  const url = `https://api-inference.huggingface.co/models/${encodeURIComponent(model)}`;
   const key = hfPool.next();
   const res = await fetchWithTimeout(
     url,

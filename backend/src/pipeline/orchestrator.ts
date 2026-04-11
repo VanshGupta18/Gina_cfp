@@ -1,32 +1,23 @@
 import { randomUUID } from 'crypto';
 import type { FastifyInstance, FastifyReply } from 'fastify';
 import type { ColumnProfile } from '../semantic/profiler.js';
+import type { QueryResultPayload } from '../types/queryResultPayload.js';
+import {
+  getNarrationCache,
+  narrationCacheKey,
+  resultShapeFingerprint,
+  storeNarrationCache,
+} from '../cache/narrationCache.js';
+import {
+  getResponseCache,
+  incrementResponseCacheHits,
+  storeResponseCache,
+} from '../cache/responseCache.js';
 import { generateSql } from './sqlGenerator.js';
 import { runPlanner } from './planner.js';
 import { validateSql } from './sqlValidator.js';
 
-/** §9 OutputPayload — Person A will enrich assembly; B emits a minimal valid shape. */
-export type QueryResultPayload = {
-  messageId: string;
-  narrative: string;
-  chartType: 'bar' | 'line' | 'big_number' | 'grouped_bar' | 'stacked_bar' | 'table';
-  chartData:
-    | {
-        labels: string[];
-        datasets: Array<{ label: string; data: number[] }>;
-      }
-    | { value: number; label: string };
-  keyFigure: string;
-  citationChips: string[];
-  sql: string;
-  secondarySql: string | null;
-  rowCount: number;
-  confidenceScore: number;
-  followUpSuggestions: string[];
-  autoInsights: string[];
-  cacheHit: boolean;
-  snapshotUsed: boolean;
-};
+export type { QueryResultPayload };
 
 export type QueryOrchestrationInput = {
   fastify: FastifyInstance;
@@ -86,9 +77,19 @@ function minimalTablePayload(
   };
 }
 
+/** Persist §5 response_cache; strip cacheHit so stored rows are always "miss" shape for TTL refresh. */
+async function persistResponseCache(
+  pool: FastifyInstance['db'],
+  datasetId: string,
+  question: string,
+  payload: QueryResultPayload,
+): Promise<void> {
+  const toStore = { ...payload, cacheHit: false };
+  await storeResponseCache(pool, datasetId, question, toStore);
+}
+
 /**
- * Person B — Phase 4: SSE `step` / `result` / `error`, intent routing (§Backend_Master).
- * Stubs: narration text, chart assembly, secondary query, persistence → Person A.
+ * Phase 4 SSE + Phase 5 caches (Person B). Telemetry → Person A.
  */
 export async function runQueryOrchestration(input: QueryOrchestrationInput): Promise<void> {
   const { fastify, reply, userId, datasetId, question, sessionContext } = input;
@@ -107,6 +108,25 @@ export async function runQueryOrchestration(input: QueryOrchestrationInput): Pro
 
   if (load.rowCount === 0) {
     await sendError(reply, 'Dataset not found or no semantic state', false);
+    reply.sse.close();
+    return;
+  }
+
+  const cached = await getResponseCache(fastify.db, datasetId, question);
+  if (cached) {
+    await incrementResponseCacheHits(fastify.db, cached.cacheKey);
+    await sendStep(reply, {
+      step: 'cache_hit',
+      status: 'complete',
+      detail: 'Answer restored from cache',
+      cacheType: 'response_cache',
+    });
+    const out: QueryResultPayload = {
+      ...cached.payload,
+      messageId: randomUUID(),
+      cacheHit: true,
+    };
+    await sendResult(reply, out);
     reply.sse.close();
     return;
   }
@@ -158,7 +178,7 @@ export async function runQueryOrchestration(input: QueryOrchestrationInput): Pro
         plan.conversationalReply?.trim() ||
         "I'm here to help you explore this dataset. Ask a question about your data in plain English.";
       await sendStep(reply, { step: 'narration', status: 'complete', detail: 'Done' });
-      await sendResult(reply, {
+      const payload: QueryResultPayload = {
         messageId: randomUUID(),
         narrative: text,
         chartType: 'table',
@@ -173,7 +193,9 @@ export async function runQueryOrchestration(input: QueryOrchestrationInput): Pro
         autoInsights: [],
         cacheHit: false,
         snapshotUsed: false,
-      });
+      };
+      await sendResult(reply, payload);
+      await persistResponseCache(fastify.db, datasetId, question, payload);
       reply.sse.close();
       return;
     }
@@ -187,7 +209,7 @@ export async function runQueryOrchestration(input: QueryOrchestrationInput): Pro
             : JSON.stringify(plan.cacheAnswer)
           : 'Here is the follow-up based on your previous result.';
       await sendStep(reply, { step: 'narration', status: 'complete', detail: 'Done' });
-      await sendResult(reply, {
+      const payload: QueryResultPayload = {
         messageId: randomUUID(),
         narrative: cacheText,
         chartType: 'table',
@@ -202,7 +224,9 @@ export async function runQueryOrchestration(input: QueryOrchestrationInput): Pro
         autoInsights: [],
         cacheHit: true,
         snapshotUsed: false,
-      });
+      };
+      await sendResult(reply, payload);
+      await persistResponseCache(fastify.db, datasetId, question, payload);
       reply.sse.close();
       return;
     }
@@ -262,17 +286,23 @@ export async function runQueryOrchestration(input: QueryOrchestrationInput): Pro
       rowsReturned: rows.length,
     });
 
+    const fp = resultShapeFingerprint(rows, gen.sql);
+    const narrKey = narrationCacheKey(plan.intent, fp);
+    let narrative = await getNarrationCache(fastify.db, narrKey);
+
     await sendStep(reply, { step: 'narration', status: 'running', detail: 'Writing your answer' });
-    const narrative =
-      rows.length === 0
-        ? 'No rows matched your question. Try broadening filters or asking a different question.'
-        : `Retrieved ${rows.length} row${rows.length === 1 ? '' : 's'} for your question. (Narration polish: Person A)`;
+    if (narrative == null) {
+      narrative =
+        rows.length === 0
+          ? 'No rows matched your question. Try broadening filters or asking a different question.'
+          : `Retrieved ${rows.length} row${rows.length === 1 ? '' : 's'} for your question. (Narration polish: Person A)`;
+      await storeNarrationCache(fastify.db, narrKey, narrative);
+    }
     await sendStep(reply, { step: 'narration', status: 'complete', detail: 'Done' });
 
-    await sendResult(
-      reply,
-      minimalTablePayload(rows, plan.relevantColumns, gen.sql, narrative),
-    );
+    const resultPayload = minimalTablePayload(rows, plan.relevantColumns, gen.sql, narrative);
+    await sendResult(reply, resultPayload);
+    await persistResponseCache(fastify.db, datasetId, question, resultPayload);
     reply.sse.close();
   } catch (e) {
     fastify.log.error({ err: e }, 'runQueryOrchestration');
