@@ -26,7 +26,7 @@
 | `src/server.ts` — Fastify entry, register CORS + multipart + SSE plugins, `/health` route | B | `src/server.ts` |
 | `src/plugins/db.ts` — pg pool plugin, connection test on startup | A | `src/plugins/db.ts` |
 | `migrations/001_initial_schema.sql` — full DDL from Section 3.1 (all 9 tables + pgvector + hnsw index + `readonly_agent` role) | A | `migrations/001_initial_schema.sql` |
-| Run migration against local PostgreSQL | A | — |
+| Run migration against Supabase PostgreSQL (`psql $DATABASE_URL -f migrations/001_initial_schema.sql`) | A | — |
 
 ### ✅ Phase 0 Verification
 ```bash
@@ -35,20 +35,20 @@ curl http://localhost:3001/health
 # Expected: { "status": "ok" }
 
 # 2. All 9 tables exist
-psql -d talktodata -c "\dt"
+psql $DATABASE_URL -c "\dt"
 # Expected: users, datasets, semantic_states, schema_embeddings,
 #           conversations, messages, response_cache, narration_cache, pipeline_runs
 
 # 3. pgvector extension loaded
-psql -d talktodata -c "SELECT extname FROM pg_extension WHERE extname = 'pgvector';"
+psql $DATABASE_URL -c "SELECT extname FROM pg_extension WHERE extname = 'pgvector';"
 # Expected: pgvector
 
 # 4. hnsw index exists on schema_embeddings
-psql -d talktodata -c "\di" | grep hnsw
+psql $DATABASE_URL -c "\di" | grep hnsw
 # Expected: one hnsw index on schema_embeddings
 
 # 5. readonly_agent role exists
-psql -d talktodata -c "SELECT rolname FROM pg_roles WHERE rolname = 'readonly_agent';"
+psql $DATABASE_URL -c "SELECT rolname FROM pg_roles WHERE rolname = 'readonly_agent';"
 
 # 6. Env validation rejects missing vars
 # Remove a required var → server should crash with Zod error (not a silent undefined)
@@ -96,7 +96,7 @@ curl -H "Authorization: Bearer garbage" http://localhost:3001/api/datasets
 # Expected: 401
 
 # 6. User sync creates row in users table
-psql -d talktodata -c "SELECT * FROM users;"
+psql $DATABASE_URL -c "SELECT * FROM users;"
 # Expected: one row with the test user's Supabase ID and email
 ```
 
@@ -146,11 +146,11 @@ curl -X POST -H "Authorization: Bearer <jwt>" \
 # Expected: 200 with { dataset, semanticState, understandingCard, piiSummary }
 
 # 2. Dynamic table exists with correct columns and types
-psql -d talktodata -c "\d dataset_<returned_uuid>"
+psql $DATABASE_URL -c "\d dataset_<returned_uuid>"
 # Expected: _row_id SERIAL PK + columns matching CSV headers with inferred types
 
 # 3. Data rows inserted
-psql -d talktodata -c "SELECT COUNT(*) FROM dataset_<uuid>;"
+psql $DATABASE_URL -c "SELECT COUNT(*) FROM dataset_<uuid>;"
 # Expected: matches CSV row count
 
 # 4. File exists in S3
@@ -158,11 +158,11 @@ aws s3 ls s3://talktodata-uploads/uploads/<userId>/<datasetId>/
 # Expected: file listed
 
 # 5. Semantic state stored
-psql -d talktodata -c "SELECT understanding_card FROM semantic_states WHERE dataset_id = '<id>';"
+psql $DATABASE_URL -c "SELECT understanding_card FROM semantic_states WHERE dataset_id = '<id>';"
 # Expected: non-null sentence
 
 # 6. Embeddings stored with correct dimensions
-psql -d talktodata -c "SELECT column_name, vector_dims(embedding) FROM schema_embeddings WHERE dataset_id = '<id>';"
+psql $DATABASE_URL -c "SELECT column_name, vector_dims(embedding) FROM schema_embeddings WHERE dataset_id = '<id>';"
 # Expected: one row per column, all 384 dimensions
 
 # 7. Retriever returns ranked columns for a natural language query
@@ -171,11 +171,11 @@ psql -d talktodata -c "SELECT column_name, vector_dims(embedding) FROM schema_em
 # Expected: amount column ranked highest
 
 # 8. Demo datasets seeded
-psql -d talktodata -c "SELECT name, is_demo, demo_slug FROM datasets WHERE is_demo = true;"
+psql $DATABASE_URL -c "SELECT name, is_demo, demo_slug FROM datasets WHERE is_demo = true;"
 # Expected: 3 rows (sunita, james, donations)
 
 # 9. Demo dynamic tables queryable
-psql -d talktodata -c "SELECT COUNT(*) FROM dataset_demo_sunita;"
+psql $DATABASE_URL -c "SELECT COUNT(*) FROM dataset_demo_sunita;"
 # Expected: 80 rows (per YAML spec)
 
 # 10. Semantic correction works
@@ -296,11 +296,11 @@ curl -N -X POST -H "Authorization: Bearer <jwt>" \
 # citationChips, sql, rowCount, confidenceScore, followUpSuggestions, autoInsights
 
 # 3. Message persisted to database
-psql -d talktodata -c "SELECT role, content, output_payload IS NOT NULL as has_output FROM messages WHERE conversation_id = '<id>';"
+psql $DATABASE_URL -c "SELECT role, content, output_payload IS NOT NULL as has_output FROM messages WHERE conversation_id = '<id>';"
 # Expected: 2 rows — user (has_output=false), assistant (has_output=true)
 
 # 4. Conversation title auto-set
-psql -d talktodata -c "SELECT title FROM conversations WHERE id = '<id>';"
+psql $DATABASE_URL -c "SELECT title FROM conversations WHERE id = '<id>';"
 # Expected: truncated version of the first question
 
 # 5. Fallback fires when EC2 is unreachable
@@ -320,7 +320,7 @@ psql -d talktodata -c "SELECT title FROM conversations WHERE id = '<id>';"
 # Expected: secondary_query step event appears in stream
 
 # 9. Pipeline telemetry logged
-psql -d talktodata -c "SELECT intent, sql_path, latency_total_ms, rows_returned FROM pipeline_runs ORDER BY created_at DESC LIMIT 1;"
+psql $DATABASE_URL -c "SELECT intent, sql_path, latency_total_ms, rows_returned FROM pipeline_runs ORDER BY created_at DESC LIMIT 1;"
 # Expected: row with all fields populated
 ```
 
@@ -350,7 +350,7 @@ curl -N -X POST ... -d '{"question":"What was my total spending?",...}'
 # Expected: result event with cacheHit: true, near-instant (no LLM latency)
 
 # 3. Cache row exists in DB
-psql -d talktodata -c "SELECT cache_key, hit_count, expires_at FROM response_cache;"
+psql $DATABASE_URL -c "SELECT cache_key, hit_count, expires_at FROM response_cache;"
 # Expected: 1 row, hit_count = 1, expires_at = now + 24h
 
 # 4. Narration cache works (same result shape, different phrasing)
@@ -358,12 +358,12 @@ psql -d talktodata -c "SELECT cache_key, hit_count, expires_at FROM response_cac
 # If narration cache hit: "narration_cache" in pipeline_runs.cache_hit
 
 # 5. Pipeline telemetry row exists
-psql -d talktodata -c "SELECT intent, sql_path, latency_total_ms, cache_hit, fallback_triggered FROM pipeline_runs ORDER BY created_at DESC LIMIT 3;"
+psql $DATABASE_URL -c "SELECT intent, sql_path, latency_total_ms, cache_hit, fallback_triggered FROM pipeline_runs ORDER BY created_at DESC LIMIT 3;"
 # Expected: rows with all fields populated, cache_hit = 'response_cache' for repeat query
 
 # 6. Expired cache is not served
 # Manually set expires_at to past:
-psql -d talktodata -c "UPDATE response_cache SET expires_at = NOW() - INTERVAL '1 hour';"
+psql $DATABASE_URL -c "UPDATE response_cache SET expires_at = NOW() - INTERVAL '1 hour';"
 # Re-run query → should go through full pipeline again (cache miss)
 ```
 
@@ -406,7 +406,7 @@ curl -X POST -H "Authorization: Bearer <jwt>" http://localhost:3001/api/snapshot
 
 # 7. No pipeline_runs telemetry row for snapshot queries
 # (snapshots bypass the pipeline — no telemetry row should be written, or snapshot_used=true)
-psql -d talktodata -c "SELECT snapshot_used FROM pipeline_runs ORDER BY created_at DESC LIMIT 1;"
+psql $DATABASE_URL -c "SELECT snapshot_used FROM pipeline_runs ORDER BY created_at DESC LIMIT 1;"
 # Expected: true for snapshot query
 ```
 
@@ -450,7 +450,7 @@ curl -H "Authorization: Bearer <jwt>" http://localhost:3001/api/datasets/nonexis
 # Expected: 404
 
 # 5. Telemetry complete for 10+ queries
-psql -d talktodata -c "SELECT COUNT(*), AVG(latency_total_ms), COUNT(CASE WHEN fallback_triggered THEN 1 END) as fallbacks FROM pipeline_runs;"
+psql $DATABASE_URL -c "SELECT COUNT(*), AVG(latency_total_ms), COUNT(CASE WHEN fallback_triggered THEN 1 END) as fallbacks FROM pipeline_runs;"
 # Expected: count=10+, avg latency populated, fallback count reasonable
 
 # 6. Server runs stable for 30+ minutes under light load without memory leaks or crashes

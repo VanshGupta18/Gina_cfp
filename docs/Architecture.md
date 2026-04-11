@@ -28,15 +28,21 @@ The architecture follows three validated reference patterns:
                            │
 ┌──────────────────────────▼──────────────────────────────────────────┐
 │  LINUX SERVER                                                       │
-│  ┌─────────────────────┐    ┌──────────────────────────────────┐   │
-│  │  Fastify (Node.js)  │    │  PostgreSQL + pgvector           │   │
-│  │  Pipeline API       │◄──►│  · User data tables              │   │
-│  │  SSE streaming      │    │  · Schema embeddings             │   │
-│  └─────────────────────┘    │  · Conversations + messages      │   │
-│                             │  · Response + narration cache    │   │
-│                             │  · Pipeline telemetry            │   │
-│                             └──────────────────────────────────┘   │
-└──────────────────────────┬──────────────────────────────────────────┘
+│  ┌─────────────────────┐                                            │
+│  │  Fastify (Node.js)  │◄─── connects via DATABASE_URL ────┐       │
+│  │  Pipeline API       │                                   │       │
+│  │  SSE streaming      │                                   │       │
+│  └─────────────────────┘                                   │       │
+└──────────────────────────┬─────────────────────────────────┼────────┘
+                           │                                 │
+                           │    ┌────────────────────────────▼───────┐
+                           │    │  Supabase PostgreSQL + pgvector   │
+                           │    │  · User data tables               │
+                           │    │  · Schema embeddings              │
+                           │    │  · Conversations + messages       │
+                           │    │  · Response + narration cache     │
+                           │    │  · Pipeline telemetry             │
+                           │    └───────────────────────────────────┘
                            │
           ┌────────────────┼──────────────────────┐
           │                │                      │
@@ -67,7 +73,8 @@ The architecture follows three validated reference patterns:
 
                            ┌──────────────┐
                            │  Supabase    │
-                           │  Auth only   │
+                           │  Auth +      │
+                           │  PostgreSQL  │
                            │  (OAuth/JWT) │
                            └──────────────┘
 ```
@@ -346,6 +353,8 @@ dataset_{uuid}           ← Dynamic table per upload (actual CSV data)
 
 **Dynamic dataset tables:** Each uploaded CSV gets its own table (`dataset_{uuid}`). Column types inferred from data (NUMERIC, DATE, TEXT). All queried by Agent 2 via the read-only `readonly_agent` PostgreSQL role.
 
+**Hosting:** All tables live in Supabase PostgreSQL (cloud). Fastify connects via `DATABASE_URL` (pooled connection string from Supabase dashboard). pgvector is enabled as a Supabase extension.
+
 ---
 
 ## Fallback Chain (every step has a recovery path)
@@ -421,9 +430,9 @@ If any fallback fires mid-demo, the pipeline trace shows it honestly: `⚠ Using
 |---|---|---|
 | Frontend | Next.js 14 + Tailwind | Vercel |
 | Backend API | Node.js + Fastify | Linux server |
-| Database | PostgreSQL 15 + pgvector | Linux server (co-located with backend) |
+| Database | PostgreSQL 15 + pgvector | Supabase cloud (free tier) |
 | File storage | AWS S3 | AWS (eu-west-2) |
-| Auth | Supabase Auth (OAuth) | Supabase cloud (free tier) |
+| Auth + Database | Supabase Auth (OAuth) + PostgreSQL + pgvector | Supabase cloud (free tier) |
 | SQL generation (primary) | SQLCoder-8B | EC2 instance |
 | SQL generation (fallback) | SQLCoder-8B API | HuggingFace (free tier) |
 | Planner + routing | Llama 4 Scout 17B | Groq (free tier) |

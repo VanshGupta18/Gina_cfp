@@ -1,7 +1,7 @@
 # Talk to Data — Backend Master Specification
 
 > **Stack:** Node.js + Fastify · PostgreSQL + pgvector · S3 · Supabase Auth (JWT verification) · SSE
-> **Deployment:** Linux server (backend + PostgreSQL + pgvector co-located)
+> **Deployment:** Linux server (backend) · Supabase PostgreSQL + pgvector (cloud)
 > **Version:** Final · April 2026
 
 ---
@@ -77,7 +77,7 @@ backend/
 
 ```env
 # PostgreSQL
-DATABASE_URL=postgresql://user:pass@localhost:5432/talktodata
+DATABASE_URL=postgresql://postgres.[project-ref]:[password]@aws-0-[region].pooler.supabase.com:6543/postgres
 
 # Supabase (JWT verification only — auth is managed by Supabase)
 SUPABASE_URL=https://xxx.supabase.co

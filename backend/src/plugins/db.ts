@@ -23,7 +23,7 @@ async function dbPlugin(fastify: FastifyInstance) {
   const client = await pool.connect();
   try {
     await client.query('SELECT 1');
-    fastify.log.info('PostgreSQL connection verified');
+    fastify.log.info('Supabase PostgreSQL connection verified');
   } finally {
     client.release();
   }

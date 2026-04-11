@@ -1,6 +1,7 @@
 -- Talk to Data — Initial Schema
 -- Run with: psql $DATABASE_URL -f migrations/001_initial_schema.sql
--- Requires PostgreSQL 15+ with pgvector extension available
+-- Requires Supabase PostgreSQL with pgvector extension enabled
+-- Enable pgvector via Supabase Dashboard → Database → Extensions before running
 
 -- =====================================================
 -- Extensions
