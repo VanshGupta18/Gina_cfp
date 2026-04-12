@@ -1,17 +1,21 @@
 'use client';
 
-import { useReasoningToggle } from '@/lib/hooks/useReasoningToggle';
+export interface ReasoningToggleProps {
+  showReasoning: boolean;
+  onToggle: () => void;
+  mounted: boolean;
+}
 
-export function ReasoningToggle() {
-  const { showReasoning, toggleReasoning, mounted } = useReasoningToggle();
-
+/** Controlled by parent so one `useReasoningToggle()` instance drives both the button and AssistantMessage. */
+export function ReasoningToggle({ showReasoning, onToggle, mounted }: ReasoningToggleProps) {
   if (!mounted) {
-    return null; // Avoid hydration mismatch
+    return null;
   }
 
   return (
     <button
-      onClick={toggleReasoning}
+      type="button"
+      onClick={onToggle}
       className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
         showReasoning
           ? 'bg-brand-teal text-white shadow-lg shadow-brand-teal/20'

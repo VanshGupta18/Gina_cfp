@@ -30,13 +30,16 @@ export default function UnderstandingCard({ text, onCorrectionClick }: Understan
             <p className="text-sm text-slate-300 leading-relaxed max-w-prose mb-3">
               {text}
             </p>
-            
-            <button 
-              onClick={onCorrectionClick}
-              className="text-xs font-medium text-brand-amber hover:text-brand-amber-light underline underline-offset-4 decoration-brand-amber/30 hover:decoration-brand-amber-light transition-colors"
-            >
-              Something off?
-            </button>
+
+            {onCorrectionClick && (
+              <button
+                type="button"
+                onClick={onCorrectionClick}
+                className="text-xs font-medium text-brand-amber hover:text-brand-amber-light underline underline-offset-4 decoration-brand-amber/30 hover:decoration-brand-amber-light transition-colors"
+              >
+                Something off? Fix column understanding
+              </button>
+            )}
           </div>
         </div>
       </div>

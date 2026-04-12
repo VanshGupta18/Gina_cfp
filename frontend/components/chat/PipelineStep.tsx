@@ -2,14 +2,20 @@
 
 import { PipelineStep as PipelineStepType } from '@/types';
 
-// Map step names to human-readable labels
+// Map backend orchestrator `step` field → UI labels (see backend sendStep in orchestrator.ts)
 const STEP_LABELS: Record<string, string> = {
   planner: 'Understanding your question',
+  cache_hit: 'Answer from cache',
+  sql_generation: 'Generating SQL',
+  sql_fallback: 'Using backup SQL path',
+  db_execution: 'Running query on your data',
+  secondary_query: 'Breaking down drivers',
+  narration: 'Writing your answer',
+  // Legacy / alternate names
   semantic_mapper: 'Mapping to your data',
   sql_generator: 'Generating query',
   executor: 'Running query',
   formatter: 'Formatting results',
-  narrator: 'Crafting explanation',
   completeness_check: 'Final validation',
 };
 

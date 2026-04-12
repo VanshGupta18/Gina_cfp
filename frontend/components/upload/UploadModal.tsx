@@ -6,6 +6,7 @@ import { uploadDataset } from '@/lib/api/datasets';
 import { useDatasets } from '@/lib/hooks/useDatasets';
 import PIISummaryBanner from './PIISummaryBanner';
 import UnderstandingCard from './UnderstandingCard';
+import { CorrectionModal } from './CorrectionModal';
 
 interface UploadModalProps {
   onClose: () => void;
@@ -22,7 +23,9 @@ export default function UploadModal({ onClose }: UploadModalProps) {
   const [redactedColumns, setRedactedColumns] = useState<string[]>([]);
   const [understandingCard, setUnderstandingCard] = useState<string | null>(null);
   const [uploadComplete, setUploadComplete] = useState(false);
-  
+  const [uploadedDatasetId, setUploadedDatasetId] = useState<string | null>(null);
+  const [correctionModalOpen, setCorrectionModalOpen] = useState(false);
+
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleProcessFile = async (file: File) => {
@@ -38,6 +41,8 @@ export default function UploadModal({ onClose }: UploadModalProps) {
     setIsProcessing(true);
     setError(null);
     setRedactedColumns([]);
+    setUploadedDatasetId(null);
+    setCorrectionModalOpen(false);
     
     try {
       // 1. Run PII Shield locally
@@ -49,6 +54,7 @@ export default function UploadModal({ onClose }: UploadModalProps) {
       
       // 3. Success state
       setUnderstandingCard(result.understandingCard);
+      setUploadedDatasetId(result.dataset.id);
       setUploadComplete(true);
       await refreshDatasets();
       
@@ -86,6 +92,7 @@ export default function UploadModal({ onClose }: UploadModalProps) {
   };
 
   return (
+    <>
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
       <div className="relative w-full max-w-2xl bg-surface-secondary border border-surface-border rounded-2xl shadow-2xl flex flex-col max-h-[90vh]">
         
@@ -187,7 +194,12 @@ export default function UploadModal({ onClose }: UploadModalProps) {
             // Success State
             <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
               <PIISummaryBanner redactedColumns={redactedColumns} />
-              <UnderstandingCard text={understandingCard} />
+              <UnderstandingCard
+                text={understandingCard}
+                onCorrectionClick={
+                  uploadedDatasetId ? () => setCorrectionModalOpen(true) : undefined
+                }
+              />
               
               <div className="mt-8 flex justify-end">
                 <button
@@ -202,5 +214,17 @@ export default function UploadModal({ onClose }: UploadModalProps) {
         </div>
       </div>
     </div>
+
+    {correctionModalOpen && uploadedDatasetId && (
+      <CorrectionModal
+        datasetId={uploadedDatasetId}
+        onClose={() => setCorrectionModalOpen(false)}
+        onSuccess={() => {
+          setCorrectionModalOpen(false);
+          void refreshDatasets();
+        }}
+      />
+    )}
+    </>
   );
 }

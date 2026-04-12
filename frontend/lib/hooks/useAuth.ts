@@ -26,6 +26,7 @@ export function useAuth(): UseAuthReturn {
           Authorization: `Bearer ${accessToken}`,
           'Content-Type': 'application/json',
         },
+        body: '{}',
       });
     } catch {
       // Non-critical — don't block UI on sync failure
@@ -38,6 +39,9 @@ export function useAuth(): UseAuthReturn {
       setSession(session);
       setUser(session?.user ?? null);
       setIsLoading(false);
+      if (session?.access_token) {
+        syncUser(session.access_token);
+      }
     });
 
     // Listen for auth state changes

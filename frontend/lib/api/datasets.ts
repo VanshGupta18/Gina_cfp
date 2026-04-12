@@ -1,5 +1,5 @@
 import { apiFetch, createFormData } from './client';
-import type { Dataset, UploadResult, SemanticState, ColumnProfile } from '@/types';
+import type { Dataset, UploadResult, SemanticState, SemanticCorrection } from '@/types';
 
 /**
  * Datasets API endpoints
@@ -28,7 +28,7 @@ export async function getSemanticState(datasetId: string): Promise<SemanticState
 
 export async function patchSemanticState(
   datasetId: string,
-  corrections: ColumnProfile[]
+  corrections: SemanticCorrection[]
 ): Promise<SemanticState> {
   const response = await apiFetch<SemanticState>(`/api/datasets/${datasetId}/semantic`, {
     method: 'PATCH',

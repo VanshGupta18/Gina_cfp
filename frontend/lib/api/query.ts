@@ -14,11 +14,17 @@ export async function* streamQuery(
   payload: QueryPayload,
   token: string
 ): AsyncGenerator<SSEEvent> {
-  const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/api/query`, {
+  const base = process.env.NEXT_PUBLIC_API_BASE_URL;
+  if (!base) {
+    throw new Error('NEXT_PUBLIC_API_BASE_URL is required');
+  }
+
+  const response = await fetch(`${base}/api/query`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`,
+      Accept: 'text/event-stream',
+      Authorization: `Bearer ${token}`,
     },
     body: JSON.stringify(payload),
   });

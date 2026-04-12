@@ -15,6 +15,12 @@ async function authPluginImpl(fastify: FastifyInstance) {
   });
 
   fastify.addHook('preHandler', async (request, reply) => {
+    // CORS preflight (PATCH/DELETE + JSON) has no Authorization header; must not 401 or the
+    // browser blocks the real request with a misleading "Failed to fetch".
+    if (request.method === 'OPTIONS') {
+      return;
+    }
+
     const token = parseBearer(request.headers.authorization);
     if (!token) {
       return reply.status(401).send({ error: 'Missing token' });

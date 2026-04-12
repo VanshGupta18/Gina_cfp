@@ -1,8 +1,9 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { getSemanticState, patchSemanticState } from '@/lib/api/datasets';
-import { SemanticState, ColumnProfile } from '@/types';
+import { buildSemanticCorrections } from '@/lib/semantic/corrections';
+import type { SemanticState, ColumnProfile } from '@/types';
 
 interface CorrectionModalProps {
   datasetId: string;
@@ -14,19 +15,23 @@ export function CorrectionModal({ datasetId, onClose, onSuccess }: CorrectionMod
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  
+
   const [semanticState, setSemanticState] = useState<SemanticState | null>(null);
   const [columns, setColumns] = useState<ColumnProfile[]>([]);
+  /** Snapshot from GET — used to diff and build backend PATCH DTO */
+  const initialColumnsRef = useRef<ColumnProfile[]>([]);
 
   useEffect(() => {
     async function load() {
       try {
         const state = await getSemanticState(datasetId);
         setSemanticState(state);
-        setColumns(state.schemaJson.columns);
+        const cols = state.schemaJson.columns;
+        setColumns(cols);
+        initialColumnsRef.current = cols.map((c) => ({ ...c }));
       } catch (err: unknown) {
-        const error = err instanceof Error ? err.message : 'Failed to load semantic schema';
-        setError(error);
+        const message = err instanceof Error ? err.message : 'Failed to load semantic schema';
+        setError(message);
       } finally {
         setLoading(false);
       }
@@ -36,30 +41,50 @@ export function CorrectionModal({ datasetId, onClose, onSuccess }: CorrectionMod
 
   const handleUpdate = (idx: number, field: keyof ColumnProfile, value: string) => {
     const updated = [...columns];
-    updated[idx] = { ...updated[idx], [field]: value };
+    if (field === 'semanticType') {
+      updated[idx] = {
+        ...updated[idx],
+        semanticType: value as ColumnProfile['semanticType'],
+      };
+    } else {
+      updated[idx] = { ...updated[idx], [field]: value };
+    }
     setColumns(updated);
   };
 
   const handleSubmit = async () => {
     if (!semanticState) return;
+    const corrections = buildSemanticCorrections(initialColumnsRef.current, columns);
+    if (corrections.length === 0) {
+      setError('No changes to save. Edit a column label or type first.');
+      return;
+    }
+
     setSubmitting(true);
     setError(null);
     try {
-      const updatedState = await patchSemanticState(datasetId, columns);
+      const updatedState = await patchSemanticState(datasetId, corrections);
       onSuccess(updatedState);
       onClose();
     } catch (err: unknown) {
-      const error = err instanceof Error ? err.message : 'Failed to save corrections';
-      setError(error);
+      let message = err instanceof Error ? err.message : 'Failed to save corrections';
+      if (
+        message.includes('Dataset not found') ||
+        message.includes('Semantic state not found')
+      ) {
+        message =
+          'Cannot update this dataset. You may not own it (e.g. demo datasets are read-only for corrections).';
+      }
+      setError(message);
     } finally {
       setSubmitting(false);
     }
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
       <div className="relative w-full max-w-4xl bg-surface-secondary border border-surface-border rounded-2xl shadow-xl flex flex-col max-h-[85vh]">
-        
+
         {/* Header */}
         <div className="flex items-center justify-between p-6 border-b border-surface-border">
           <div>
@@ -100,18 +125,18 @@ export function CorrectionModal({ datasetId, onClose, onSuccess }: CorrectionMod
                 </thead>
                 <tbody className="bg-surface-secondary divide-y divide-surface-border">
                   {columns.map((col, idx) => (
-                    <tr key={idx} className="hover:bg-surface/50 transition-colors">
+                    <tr key={col.columnName} className="hover:bg-surface/50 transition-colors">
                       <td className="px-4 py-3 font-mono text-xs">{col.columnName}</td>
                       <td className="px-4 py-3">
-                        <input 
-                          type="text" 
+                        <input
+                          type="text"
                           value={col.businessLabel}
                           onChange={(e) => handleUpdate(idx, 'businessLabel', e.target.value)}
                           className="w-full bg-surface border border-surface-border rounded-md px-3 py-1.5 focus:outline-none focus:border-brand-teal text-slate-200"
                         />
                       </td>
                       <td className="px-4 py-3">
-                        <select 
+                        <select
                           value={col.semanticType}
                           onChange={(e) => handleUpdate(idx, 'semanticType', e.target.value)}
                           className="w-full bg-surface border border-surface-border rounded-md px-3 py-1.5 focus:outline-none focus:border-brand-teal text-slate-200"
@@ -137,13 +162,13 @@ export function CorrectionModal({ datasetId, onClose, onSuccess }: CorrectionMod
 
         {/* Footer */}
         <div className="p-6 border-t border-surface-border flex justify-end gap-3 bg-surface-secondary rounded-b-2xl">
-          <button 
+          <button
             onClick={onClose}
             className="px-4 py-2 rounded-lg bg-surface border border-surface-border text-slate-300 hover:text-white transition-colors text-sm font-medium"
           >
             Cancel
           </button>
-          <button 
+          <button
             onClick={handleSubmit}
             disabled={submitting || loading}
             className="px-6 py-2 rounded-lg bg-brand-teal text-white shadow-lg shadow-brand-teal/20 text-sm font-medium hover:bg-brand-teal-light transition-all disabled:opacity-50 flex items-center gap-2"

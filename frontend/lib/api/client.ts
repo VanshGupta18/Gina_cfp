@@ -1,4 +1,5 @@
 import { createBrowserClient } from '@supabase/ssr';
+import { formatApiFailure } from '@/lib/api/errors';
 
 /**
  * Typed fetch wrapper that automatically attaches JWT from Supabase session
@@ -24,6 +25,9 @@ export async function apiFetch<T>(
   endpoint: string,
   options: RequestInit & { method?: string } = {}
 ): Promise<T> {
+  const method = options.method ?? 'GET';
+  const url = `${API_BASE_URL}${endpoint}`;
+
   try {
     // Get the current session
     const {
@@ -31,7 +35,9 @@ export async function apiFetch<T>(
     } = await supabase.auth.getSession();
 
     if (!session?.access_token) {
-      throw new Error('No authentication token available');
+      throw new Error(
+        'No authentication token available. Try signing out and back in, or refresh the page.'
+      );
     }
 
     // Build request headers
@@ -43,8 +49,6 @@ export async function apiFetch<T>(
       headers.set('Content-Type', 'application/json');
     }
 
-    // Make the request
-    const url = `${API_BASE_URL}${endpoint}`;
     const response = await fetch(url, {
       ...options,
       headers,
@@ -62,20 +66,35 @@ export async function apiFetch<T>(
 
     // Handle errors
     if (!response.ok) {
-      const errorMessage =
-        typeof data === 'object' && data !== null && 'error' in data
-          ? (data as { error: string }).error
-          : `HTTP ${response.status}`;
+      let errorMessage: string;
+      if (typeof data === 'object' && data !== null && 'error' in data) {
+        errorMessage = (data as { error: string }).error;
+        if (
+          'details' in data &&
+          typeof (data as { details?: unknown }).details === 'object' &&
+          (data as { details?: { fieldErrors?: Record<string, string[]> } }).details?.fieldErrors
+        ) {
+          const fe = (data as { details: { fieldErrors?: Record<string, string[]> } }).details
+            .fieldErrors;
+          const first = fe && Object.values(fe).flat()[0];
+          if (first) errorMessage = `${errorMessage}: ${first}`;
+        }
+      } else {
+        errorMessage = `HTTP ${response.status}`;
+      }
 
       throw new Error(`API Error: ${errorMessage}`);
     }
 
     return data as T;
   } catch (err) {
-    if (err instanceof Error) {
+    if (err instanceof Error && err.message.startsWith('API Error:')) {
       throw err;
     }
-    throw new Error(`API request failed: ${String(err)}`);
+    if (err instanceof Error && err.message.includes('authentication token')) {
+      throw err;
+    }
+    throw new Error(formatApiFailure(err, { url, method }));
   }
 }
 

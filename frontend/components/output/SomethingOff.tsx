@@ -3,6 +3,8 @@
 import React from 'react';
 
 export function SomethingOff({ onCorrectionClick }: { onCorrectionClick?: () => void }) {
+  if (!onCorrectionClick) return null;
+
   return (
     <div className="mt-4 pt-4 border-t border-surface-border flex justify-end">
       <button 

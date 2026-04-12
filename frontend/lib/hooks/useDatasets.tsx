@@ -19,26 +19,23 @@ const DatasetContext = createContext<DatasetContextType | undefined>(undefined);
 export function DatasetProvider({ children }: { children: React.ReactNode }) {
   const [datasets, setDatasets] = useState<Dataset[]>([]);
   const [activeDataset, setActiveDatasetState] = useState<Dataset | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const [listLoading, setListLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const { session } = useAuth();
+  const { session, isLoading: authLoading } = useAuth();
 
   const refreshDatasets = useCallback(async () => {
-    if (!session) return;
-    
-    setIsLoading(true);
+    setListLoading(true);
     setError(null);
     try {
       const fetchedDatasets = await listDatasets();
       setDatasets(fetchedDatasets);
-      
-      // Keep active dataset in sync or set first as active if none exists
+
       if (fetchedDatasets.length > 0) {
         setActiveDatasetState((current) => {
-          if (!current || !fetchedDatasets.find(d => d.id === current.id)) {
+          if (!current || !fetchedDatasets.find((d) => d.id === current.id)) {
             return fetchedDatasets[0];
           }
-          return fetchedDatasets.find(d => d.id === current.id) || current;
+          return fetchedDatasets.find((d) => d.id === current.id) || current;
         });
       } else {
         setActiveDatasetState(null);
@@ -47,14 +44,23 @@ export function DatasetProvider({ children }: { children: React.ReactNode }) {
       const message = err instanceof Error ? err.message : 'Failed to load datasets';
       setError(message);
     } finally {
-      setIsLoading(false);
+      setListLoading(false);
     }
-  }, [session]);
+  }, []);
 
-  // Initial fetch when session becomes available
+  // Wait for auth to resolve, then load datasets when a session exists.
   useEffect(() => {
-    refreshDatasets();
-  }, [refreshDatasets]);
+    if (authLoading) return;
+
+    if (!session) {
+      setDatasets([]);
+      setActiveDatasetState(null);
+      setError(null);
+      return;
+    }
+
+    void refreshDatasets();
+  }, [authLoading, session, refreshDatasets]);
 
   const setActiveDataset = useCallback(
     (datasetOrId: Dataset | string | null) => {
@@ -69,6 +75,8 @@ export function DatasetProvider({ children }: { children: React.ReactNode }) {
     },
     [datasets]
   );
+
+  const isLoading = authLoading || listLoading;
 
   return (
     <DatasetContext.Provider

@@ -8,7 +8,7 @@ import { useUploadModal } from '@/lib/hooks/useUploadModal';
 
 export default function AppPage() {
   const router = useRouter();
-  const { datasets, isLoading: datasetsLoading } = useDatasets();
+  const { datasets, isLoading: datasetsLoading, error: datasetsError, refreshDatasets } = useDatasets();
   const { conversations, isLoading: convsLoading } = useConversation();
   const { openUploadModal } = useUploadModal();
 
@@ -16,11 +16,11 @@ export default function AppPage() {
 
   // Auto-navigate to first conversation if available
   useEffect(() => {
-    if (!isAnythingLoading && conversations.length > 0) {
+    if (!isAnythingLoading && !datasetsError && conversations.length > 0) {
       const firstConv = conversations[0];
       router.push(`/app/${firstConv.id}`);
     }
-  }, [isAnythingLoading, conversations, router]);
+  }, [isAnythingLoading, datasetsError, conversations, router]);
 
   if (isAnythingLoading) {
     return (
@@ -32,6 +32,23 @@ export default function AppPage() {
              </div>
              <p className="text-sm font-medium">Loading workspace...</p>
          </div>
+      </div>
+    );
+  }
+
+  if (datasetsError) {
+    return (
+      <div className="flex-1 flex flex-col items-center justify-center p-8 bg-surface text-center max-w-lg mx-auto">
+        <div className="rounded-lg bg-red-500/10 border border-red-500/30 px-4 py-3 text-sm text-red-300 mb-4 text-left w-full">
+          {datasetsError}
+        </div>
+        <button
+          type="button"
+          onClick={() => void refreshDatasets()}
+          className="px-5 py-2.5 bg-brand-teal text-white rounded-xl text-sm font-medium hover:bg-brand-teal-light transition-all"
+        >
+          Retry
+        </button>
       </div>
     );
   }

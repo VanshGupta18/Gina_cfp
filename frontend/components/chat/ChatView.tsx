@@ -1,11 +1,13 @@
 'use client';
 
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useConversation } from '@/lib/hooks/useConversation';
 import { useDatasets } from '@/lib/hooks/useDatasets';
 import { usePipeline } from '@/lib/hooks/usePipeline';
 import { useReasoningToggle } from '@/lib/hooks/useReasoningToggle';
+import { buildSessionContextFromMessages } from '@/lib/chat/sessionContext';
 import DemoBadge from '@/components/sidebar/DemoBadge';
+import { CorrectionModal } from '@/components/upload/CorrectionModal';
 import { ChatInput } from './ChatInput';
 import { MessageList } from './MessageList';
 import { UserMessage } from './UserMessage';
@@ -13,47 +15,36 @@ import { AssistantMessage } from './AssistantMessage';
 import { ReasoningToggle } from './ReasoningToggle';
 
 export function ChatView() {
-  const { activeDataset } = useDatasets();
+  const { activeDataset, refreshDatasets } = useDatasets();
+  const [correctionModalOpen, setCorrectionModalOpen] = useState(false);
   const { activeConversation, messages, addMessage } = useConversation();
   const { steps, result, isStreaming, error, runQuery } = usePipeline();
-  const { showReasoning } = useReasoningToggle();
+  const { showReasoning, toggleReasoning, mounted: reasoningMounted } = useReasoningToggle();
 
-  // Build session context from last 3 Q&A exchanges + last result
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  useMemo(() => {
-    const exchanges = messages
-      .filter((m) => m.role === 'user' || m.role === 'assistant')
-      .slice(-6) // Last 3 exchanges = 6 messages
-      .reduce(
-        (acc, msg, idx, arr) => {
-          if (msg.role === 'user') {
-            const nextMsg = arr[idx + 1];
-            if (nextMsg && nextMsg.role === 'assistant') {
-              acc.push({
-                userQuestion: msg.content,
-                assistantResponse: nextMsg.content,
-              });
-            }
-          }
-          return acc;
-        },
-        [] as Array<{ userQuestion: string; assistantResponse: string }>
-      );
+  const sessionContextForNextQuery = useMemo(
+    () => buildSessionContextFromMessages(messages),
+    [messages]
+  );
 
-    return {
-      lastExchanges: exchanges,
-      lastResultSet: undefined,
-    };
-  }, [messages, result]);
+  const canEditSemantic =
+    !!activeDataset && !activeDataset.isDemo;
+
+  const openCorrections = () => setCorrectionModalOpen(true);
+
+  const lastAppendedResultKey = useRef<string | null>(null);
 
   // When streaming ends, add assistant message if result exists
   useEffect(() => {
     if (!isStreaming && result && activeConversation) {
+      const key = `${activeConversation.id}:${result.messageId}`;
+      if (lastAppendedResultKey.current === key) return;
+      lastAppendedResultKey.current = key;
       addMessage({
-        id: `msg-${Date.now()}`,
+        id: result.messageId,
         conversationId: activeConversation.id,
         role: 'assistant',
-        content: '', // Content will be rendered from OutputCard in Phase 6
+        content: result.narrative,
+        outputPayload: result,
         createdAt: new Date().toISOString(),
       });
     }
@@ -87,7 +78,23 @@ export function ChatView() {
         </div>
 
         {/* Reasoning Toggle (top right) */}
-        <ReasoningToggle />
+        <div className="flex items-center gap-2 shrink-0">
+          {canEditSemantic && (
+            <button
+              type="button"
+              onClick={openCorrections}
+              className="px-3 py-2 rounded-lg text-sm font-medium bg-surface-secondary text-slate-300 border border-surface-border hover:border-brand-teal/50 hover:text-slate-100 transition-colors"
+              title="Edit how columns are interpreted for this dataset"
+            >
+              Column understanding
+            </button>
+          )}
+          <ReasoningToggle
+            showReasoning={showReasoning}
+            onToggle={toggleReasoning}
+            mounted={reasoningMounted}
+          />
+        </div>
       </div>
 
       {/* Messages Area */}
@@ -103,6 +110,7 @@ export function ChatView() {
                 output={result}
                 isStreaming={isStreaming && idx === messages.length - 1}
                 showReasoning={showReasoning}
+                onCorrectionClick={canEditSemantic ? openCorrections : undefined}
               />
             )}
           </div>
@@ -122,6 +130,7 @@ export function ChatView() {
             output={null}
             isStreaming={true}
             showReasoning={showReasoning}
+            onCorrectionClick={canEditSemantic ? openCorrections : undefined}
           />
         )}
 
@@ -136,6 +145,7 @@ export function ChatView() {
       {/* Chat Input */}
       <ChatInput
         isStreaming={isStreaming}
+        sessionContext={sessionContextForNextQuery}
         onSubmit={async (payload) => {
           // Add user message to conversation
           addMessage({
@@ -151,6 +161,17 @@ export function ChatView() {
         }}
 
       />
+
+      {correctionModalOpen && activeDataset && (
+        <CorrectionModal
+          datasetId={activeDataset.id}
+          onClose={() => setCorrectionModalOpen(false)}
+          onSuccess={() => {
+            setCorrectionModalOpen(false);
+            void refreshDatasets();
+          }}
+        />
+      )}
     </div>
   );
 }

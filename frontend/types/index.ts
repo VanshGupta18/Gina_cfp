@@ -27,6 +27,14 @@ export interface ColumnProfile {
   sampleValues?: string[];
 }
 
+/** One correction in PATCH /api/datasets/:datasetId/semantic — backend `semanticPatchBodySchema` */
+export interface SemanticCorrection {
+  columnName: string;
+  newSemanticType: ColumnProfile['semanticType'];
+  newBusinessLabel: string;
+  newDescription: string;
+}
+
 export interface SemanticState {
   id: string;
   datasetId: string;
@@ -64,7 +72,7 @@ export interface Message {
 
 export interface PipelineStep {
   step: string;
-  label: string;
+  label?: string;
   status: 'pending' | 'running' | 'complete' | 'warning';
   detail?: string;
   durationMs?: number;
@@ -79,12 +87,14 @@ export interface QueryPayload {
   sessionContext?: SessionContext;
 }
 
+/** Matches backend `queryBodySchema` in `backend/src/routes/query.ts` */
 export interface SessionContext {
-  lastExchanges: Array<{
-    userQuestion: string;
-    assistantResponse: string;
+  recentExchanges: Array<{
+    question: string;
+    answer: string;
   }>;
-  lastResultSet?: Record<string, unknown>[];
+  /** Optional; backend accepts unknown (e.g. prior query rows). Omit when not available. */
+  lastResultSet?: unknown | null;
 }
 
 // =====================================================

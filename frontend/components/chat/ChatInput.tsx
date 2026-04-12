@@ -1,16 +1,19 @@
 'use client';
 
 import { useState } from 'react';
-import { QueryPayload } from '@/types';
+import { QueryPayload, type SessionContext } from '@/types';
 import { useConversation } from '@/lib/hooks/useConversation';
 
 export interface ChatInputProps {
   isStreaming: boolean;
+  /** History for this conversation, aligned with backend `sessionContext.recentExchanges` */
+  sessionContext: SessionContext;
   onSubmit: (payload: QueryPayload) => void;
 }
 
 export function ChatInput({
   isStreaming,
+  sessionContext,
   onSubmit,
 }: ChatInputProps) {
   const [input, setInput] = useState('');
@@ -28,9 +31,7 @@ export function ChatInput({
       conversationId: activeConversation.id,
       datasetId: activeConversation.datasetId,
       question: userQuery,
-      sessionContext: {
-        lastExchanges: [],
-      },
+      sessionContext,
     };
 
     onSubmit(payload);

@@ -33,21 +33,25 @@ async function main() {
       return cb(null, false);
     },
     credentials: true,
+    // Default is only GET,HEAD,POST — browsers will not send PATCH cross-origin without this.
+    methods: ['GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   });
   await app.register(multipart, {
     limits: {
       fileSize: MAX_CSV_UPLOAD_BYTES,
     },
   });
-  await app.register(ssePlugin);
   await app.register(dbPlugin);
   await app.register(s3Plugin);
 
   app.get('/health', async () => ({ status: 'ok' }));
 
-  // All /api/* routes are protected by the auth plugin via Fastify's scoped plugin system
+  // All /api/* routes are protected by the auth plugin via Fastify's scoped plugin system.
+  // @fastify/sse must be registered in this same scope — nested /api plugins do not inherit
+  // root-level decorations, so `reply.sse` was undefined on POST /api/query otherwise.
   await app.register(
     async (api) => {
+      await api.register(ssePlugin);
       await api.register(authPlugin);
       await api.register(usersRoutes);
       await api.register(datasetsRoutes);
