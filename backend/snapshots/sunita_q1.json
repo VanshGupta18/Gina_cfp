@@ -2,7 +2,7 @@
   "matchQuestion": "What were my top 3 green energy spending categories this quarter?",
   "datasetSlug": "sunita",
   "outputPayload": {
-    "narrative": "Your top 3 green energy spending categories this quarter were Solar Equipment (£14,200, 52% of green spend), Wind Power (£7,800, 29%), and Energy Audits (£5,200, 19%). Solar Equipment alone accounts for more than half of all sustainability expenditure.",
+    "narrative": "Your top 3 green energy spending categories this quarter were Solar Equipment (£14,200, 52% of green spend), Wind Power (£7,800, 29%), and Energy Audits (£5,200, 19%). Solar Equipment alone accounts for more than half of sustainability spend this quarter.",
     "chartType": "bar",
     "chartData": {
       "labels": ["Solar Equipment", "Wind Power", "Energy Audits"],
@@ -22,5 +22,60 @@
     "autoInsights": ["Solar Equipment = 52% of green spend"],
     "cacheHit": false,
     "snapshotUsed": true
-  }
+  },
+  "simulatedSteps": [
+    {
+      "step": "planner",
+      "status": "running",
+      "detail": "Understanding your question..."
+    },
+    {
+      "step": "planner",
+      "status": "complete",
+      "detail": "Identified intent and relevant columns",
+      "intent": "simple_query",
+      "relevantColumns": ["category", "amount", "sustainability_flag"]
+    },
+    {
+      "step": "sql_generation",
+      "status": "running",
+      "detail": "Generating SQL query",
+      "sqlPath": "ec2"
+    },
+    {
+      "step": "sql_fallback",
+      "status": "warning",
+      "detail": "Using backup query method",
+      "originalPath": "ec2",
+      "fallbackPath": "groq_maverick"
+    },
+    {
+      "step": "sql_generation",
+      "status": "complete",
+      "detail": "SQL ready",
+      "sqlPath": "groq_maverick"
+    },
+    {
+      "step": "db_execution",
+      "status": "running",
+      "detail": "Executing against your data"
+    },
+    {
+      "step": "db_execution",
+      "status": "complete",
+      "detail": "Query finished",
+      "rowsReturned": 3,
+      "truncated": false
+    },
+    {
+      "step": "narration",
+      "status": "running",
+      "detail": "Writing your answer"
+    },
+    {
+      "step": "narration",
+      "status": "complete",
+      "detail": "Done"
+    }
+  ]
 }
