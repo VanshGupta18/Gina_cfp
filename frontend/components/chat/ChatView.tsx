@@ -12,15 +12,15 @@ import { ChatInput } from './ChatInput';
 import { MessageList } from './MessageList';
 import { UserMessage } from './UserMessage';
 import { AssistantMessage } from './AssistantMessage';
-import { ReasoningToggle } from './ReasoningToggle';
-import { Sparkles, Bell, Settings } from 'lucide-react';
+import { Sparkles } from 'lucide-react';
+import type { QueryPayload } from '@/types';
 
 export function ChatView() {
   const { activeDataset, refreshDatasets } = useDatasets();
   const [correctionModalOpen, setCorrectionModalOpen] = useState(false);
   const { activeConversation, messages, addMessage } = useConversation();
   const { steps, result, isStreaming, error, runQuery } = usePipeline();
-  const { showReasoning, toggleReasoning, mounted: reasoningMounted } = useReasoningToggle();
+  const { showReasoning } = useReasoningToggle();
 
   const sessionContextForNextQuery = useMemo(
     () => buildSessionContextFromMessages(messages),
@@ -51,6 +51,35 @@ export function ChatView() {
     }
   }, [isStreaming, result, activeConversation, addMessage]);
 
+  // Listen for auto-submit from follow-up suggestions
+  useEffect(() => {
+    const handleAutoSubmit = async (e: Event) => {
+      const customEvent = e as CustomEvent<string>;
+      const question = customEvent.detail;
+      if (!activeConversation || isStreaming) return;
+
+      addMessage({
+        id: `msg-${Date.now()}`,
+        conversationId: activeConversation.id,
+        role: 'user',
+        content: question,
+        createdAt: new Date().toISOString(),
+      });
+
+      await runQuery({
+        conversationId: activeConversation.id,
+        datasetId: activeConversation.datasetId,
+        question,
+        sessionContext: sessionContextForNextQuery,
+      });
+    };
+
+    window.addEventListener('ttd:submit-chat', handleAutoSubmit as EventListener);
+    return () => {
+      window.removeEventListener('ttd:submit-chat', handleAutoSubmit as EventListener);
+    };
+  }, [activeConversation, isStreaming, sessionContextForNextQuery, runQuery, addMessage]);
+
   if (!activeDataset) {
     return (
       <div className="h-full flex items-center justify-center text-center text-slate-400">
@@ -77,65 +106,60 @@ export function ChatView() {
           </h2>
           {activeDataset.isDemo && <DemoBadge />}
         </div>
-
-        {/* Reasoning Toggle & Top Actions */}
-        <div className="flex items-center gap-6 shrink-0">
-          <ReasoningToggle
-            showReasoning={showReasoning}
-            onToggle={toggleReasoning}
-            mounted={reasoningMounted}
-          />
-          <div className="w-px h-5 bg-surface-border"></div>
-          <button className="text-slate-400 hover:text-white transition-colors">
-            <Bell className="w-5 h-5" />
-          </button>
-          <button className="text-slate-400 hover:text-white transition-colors">
-            <Settings className="w-5 h-5" />
-          </button>
-        </div>
       </div>
 
       {/* Main Chat Area */}
       <div className="flex-1 overflow-y-auto pb-32">
         {messages.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-full max-w-2xl mx-auto px-6 animate-in fade-in zoom-in-95 duration-500">
-            <div className="w-14 h-14 rounded-2xl bg-brand-indigo flex items-center justify-center mb-6 shadow-[0_0_20px_rgba(90,78,227,0.3)]">
-              <Sparkles className="w-7 h-7 text-white fill-white" />
+          <div className="flex flex-col items-center justify-center h-full max-w-3xl mx-auto px-6 animate-in fade-in zoom-in-95 duration-500">
+            <div className="relative mb-6 mt-16">
+              <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-brand-indigo to-brand-purple flex items-center justify-center shadow-[0_0_30px_rgba(90,78,227,0.3)]">
+                <Sparkles className="w-8 h-8 text-white" />
+              </div>
+              <div className="absolute -bottom-2 -right-2 bg-[#0F121A] p-1.5 rounded-xl">
+                 <div className="w-2.5 h-2.5 rounded-full bg-brand-cyan animate-pulse" />
+              </div>
             </div>
-            <h1 className="text-3xl font-bold font-serif text-white mb-4 text-center">
-              Ask a question about {activeDataset.name}
+            <h1 className="text-4xl font-bold font-serif text-white mb-4 text-center tracking-wide">
+              Analyze <span className="text-brand-cyan">{activeDataset.name}</span>
             </h1>
-            <p className="text-sm text-slate-400 mb-10 text-center">
-              Try one of these to get started:
+            <p className="text-sm text-slate-400 mb-12 text-center max-w-xl leading-relaxed">
+              I'm G.I.N.A., your AI data analyst. I can generate SQL queries, render interactive charts, and uncover hidden insights instantly. Try one of the actions below to begin exploring this dataset:
             </p>
             
-            <div className="flex flex-wrap items-center justify-center gap-3">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 w-full">
               {[
-                'What was the total spend in Q1?',
-                'Show me top categories by amount',
-                'Which grants were over £10,000?',
-              ].map((suggestion) => (
+                { title: 'Overview', q: 'What is the overall summary of this dataset?' },
+                { title: 'Top Spend', q: 'Show me the top 5 categories by amount spent' },
+                { title: 'Time Series', q: 'Show me the spending trend over time as a line chart' },
+                { title: 'Outliers', q: 'Are there any unusual spikes or outliers in the data?' },
+              ].map((item) => (
                 <button
-                  key={suggestion}
+                  key={item.q}
                   onClick={() => {
                     const payload: QueryPayload = {
                       conversationId: activeConversation.id,
                       datasetId: activeConversation.datasetId,
-                      question: suggestion,
+                      question: item.q,
                       sessionContext: sessionContextForNextQuery,
                     };
                     addMessage({
                       id: `msg-${Date.now()}`,
                       conversationId: activeConversation.id,
                       role: 'user',
-                      content: suggestion,
+                      content: item.q,
                       createdAt: new Date().toISOString(),
                     });
                     void runQuery(payload);
                   }}
-                  className="px-5 py-2.5 rounded-full bg-surface-secondary border border-surface-border text-sm font-medium text-slate-300 hover:bg-surface-tertiary hover:text-white transition-colors"
+                  className="group flex flex-col items-start px-5 py-4 rounded-xl bg-surface-secondary border border-surface-border text-left hover:border-brand-indigo/50 hover:bg-[#1C212E] transition-all"
                 >
-                  {suggestion}
+                  <span className="text-xs font-bold tracking-widest text-brand-indigo group-hover:text-brand-indigo-light mb-1 uppercase">
+                    {item.title}
+                  </span>
+                  <span className="text-sm font-medium text-slate-300 group-hover:text-white transition-colors">
+                    "{item.q}"
+                  </span>
                 </button>
               ))}
             </div>
@@ -150,7 +174,7 @@ export function ChatView() {
                   <AssistantMessage
                     message={msg}
                     steps={steps}
-                    output={result}
+                    output={isStreaming && idx === messages.length - 1 ? result : msg.outputPayload}
                     isStreaming={isStreaming && idx === messages.length - 1}
                     showReasoning={showReasoning}
                     onCorrectionClick={canEditSemantic ? openCorrections : undefined}

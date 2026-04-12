@@ -1,49 +1,56 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { PipelineTrace } from './PipelineTrace';
 import { PipelineStep } from '@/types';
+import { Sparkles, ChevronDown } from 'lucide-react';
+import { useReasoningToggle } from '@/lib/hooks/useReasoningToggle';
 
 export interface ThinkingPillProps {
   steps: PipelineStep[];
-  onExpandChange?: (expanded: boolean) => void;
+  defaultExpanded?: boolean;
 }
 
-export function ThinkingPill({ steps, onExpandChange }: ThinkingPillProps) {
-  const [expanded, setExpanded] = useState(false);
+export function ThinkingPill({ steps, defaultExpanded = false }: ThinkingPillProps) {
+  const { showReasoning, setReasoning } = useReasoningToggle();
+  const [expanded, setExpanded] = useState(defaultExpanded);
+
+  useEffect(() => {
+    setExpanded(defaultExpanded);
+  }, [defaultExpanded]);
 
   const handleToggle = () => {
-    const next = !expanded;
-    setExpanded(next);
-    onExpandChange?.(next);
+    const nextState = !expanded;
+    setExpanded(nextState);
+    if (nextState) {
+      setReasoning(true); // Auto-enable global reasoning if user expands
+    } else {
+      setReasoning(false); // Disable global reasoning if user hides it
+    }
   };
 
   return (
-    <div className="flex flex-col gap-3">
+    <div className="flex flex-col gap-4 mb-4">
       <button
         onClick={handleToggle}
-        className="flex items-center gap-2 px-4 py-2 rounded-full bg-surface-secondary border border-surface-border hover:bg-surface transition-colors w-fit text-sm text-slate-300"
+        className="flex items-center justify-between gap-3 px-4 py-2 rounded-xl bg-surface-secondary border border-[#2A303C] hover:bg-[#252B3A] transition-colors w-fit shadow-sm group"
       >
-        <div className="flex items-center gap-2">
-          <div className="w-2 h-2 rounded-full bg-brand-teal animate-pulse"></div>
-          <span>Thinking...</span>
+        <div className="flex items-center gap-3">
+          <div className="w-6 h-6 rounded-md bg-brand-indigo/20 flex items-center justify-center shrink-0 group-hover:bg-brand-indigo/30 transition-colors">
+            <Sparkles className="w-3.5 h-3.5 text-brand-indigo animate-pulse" />
+          </div>
+          <span className="text-sm font-medium text-slate-300">Thinking...</span>
         </div>
-        <svg
-          className={`w-4 h-4 transition-transform ${expanded ? 'rotate-180' : ''}`}
-          fill="none"
-          viewBox="0 0 24 24"
-          stroke="currentColor"
-        >
-          <path
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            strokeWidth={2}
-            d="M19 14l-7 7m0 0l-7-7m7 7V3"
-          />
-        </svg>
+        <ChevronDown
+          className={`w-4 h-4 text-slate-500 transition-transform duration-200 ${expanded ? 'rotate-180' : ''}`}
+        />
       </button>
 
-      {expanded && <PipelineTrace steps={steps} />}
+      {expanded && (
+        <div className="pl-4">
+          <PipelineTrace steps={steps} />
+        </div>
+      )}
     </div>
   );
 }

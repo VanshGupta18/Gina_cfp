@@ -1,14 +1,19 @@
 import React, { useState } from 'react';
 import { useConversation } from '@/lib/hooks/useConversation';
 import { Plus } from 'lucide-react';
+import { useRouter } from 'next/navigation';
 
 export default function NewConversationBtn() {
   const { createNewConversation } = useConversation();
   const [isCreating, setIsCreating] = useState(false);
+  const router = useRouter();
 
   const handleCreate = async () => {
     setIsCreating(true);
-    await createNewConversation();
+    const newConv = await createNewConversation();
+    if (newConv) {
+      router.push(`/app/${newConv.id}`);
+    }
     setIsCreating(false);
   };
 

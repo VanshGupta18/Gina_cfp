@@ -1,16 +1,18 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { useDatasets } from '@/lib/hooks/useDatasets';
 import { useUploadModal } from '@/lib/hooks/useUploadModal';
 import DatasetSection from './DatasetSection';
 import IntegrationDebugPanel from '@/components/debug/IntegrationDebugPanel';
-import { LogOut, Upload, Settings } from 'lucide-react';
+import { CorrectionModal } from '@/components/upload/CorrectionModal';
+import { LogOut, Upload, Settings, Bell, BrainCircuit } from 'lucide-react';
 import Link from 'next/link';
 
 export default function Sidebar() {
   const { user, signOut } = useAuth();
-  const { datasets, isLoading, error, refreshDatasets } = useDatasets();
+  const { datasets, activeDataset, isLoading, error, refreshDatasets } = useDatasets();
   const { openUploadModal } = useUploadModal();
+  const [correctionModalOpen, setCorrectionModalOpen] = useState(false);
 
   const demoDatasets = datasets.filter((d) => d.isDemo);
   const userDatasets = datasets.filter((d) => !d.isDemo);
@@ -120,9 +122,18 @@ export default function Sidebar() {
         )}
       </div>
 
-      {/* Footer Settings */}
-      <div className="p-5 border-t border-[#1C212E] flex items-center justify-between">
+      {/* Main Settings/Toggles in Footer */}
+      <div className="p-5 border-t border-[#1C212E] flex flex-col gap-4">
         <button className="flex items-center gap-2 text-sm text-slate-400 hover:text-slate-200 transition-colors">
+          <Bell className="w-4 h-4" />
+          Notifications
+        </button>
+
+        <button 
+          onClick={() => setCorrectionModalOpen(true)}
+          disabled={!activeDataset}
+          className="flex items-center gap-2 text-sm text-slate-400 hover:text-slate-200 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+        >
           <Settings className="w-4 h-4" />
           Settings
         </button>
@@ -136,6 +147,17 @@ export default function Sidebar() {
       </div>
 
       <IntegrationDebugPanel />
+
+      {correctionModalOpen && activeDataset && (
+        <CorrectionModal
+          datasetId={activeDataset.id}
+          onClose={() => setCorrectionModalOpen(false)}
+          onSuccess={() => {
+            setCorrectionModalOpen(false);
+            void refreshDatasets();
+          }}
+        />
+      )}
     </div>
   );
 }

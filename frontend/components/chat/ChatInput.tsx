@@ -1,8 +1,9 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { QueryPayload, type SessionContext } from '@/types';
 import { useConversation } from '@/lib/hooks/useConversation';
+import { useKeyboardShortcuts } from '@/lib/hooks/useKeyboardShortcuts';
 import { Paperclip, Send, ShieldCheck, Database } from 'lucide-react';
 
 export interface ChatInputProps {
@@ -19,6 +20,7 @@ export function ChatInput({
 }: ChatInputProps) {
   const [input, setInput] = useState('');
   const { activeConversation } = useConversation();
+  const formRef = useRef<HTMLFormElement>(null);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -38,9 +40,21 @@ export function ChatInput({
     onSubmit(payload);
   };
 
+  const scheduleSubmit = () => {
+    if (formRef.current && !isStreaming && input.trim() && activeConversation) {
+      formRef.current.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+    }
+  };
+
+  useKeyboardShortcuts({
+    'Cmd+Enter': scheduleSubmit,
+    'Ctrl+Enter': scheduleSubmit,
+  });
+
   return (
     <div className="absolute bottom-0 left-0 right-0 p-6 bg-gradient-to-t from-surface via-surface/90 to-transparent">
       <form
+        ref={formRef}
         onSubmit={handleSubmit}
         className="max-w-4xl mx-auto flex flex-col gap-3"
       >
@@ -62,28 +76,23 @@ export function ChatInput({
             <button
               type="submit"
               disabled={isStreaming || !input.trim() || !activeConversation}
-              className="p-2.5 rounded-lg bg-brand-indigo text-white font-medium hover:bg-brand-indigo-light disabled:bg-[#2A303C] disabled:text-slate-500 disabled:cursor-not-allowed transition-colors"
+              className="px-6 py-2.5 flex items-center justify-center gap-2 rounded-lg bg-brand-indigo text-white font-bold tracking-wide hover:bg-brand-indigo-light disabled:bg-[#2A303C] disabled:text-slate-500 disabled:cursor-not-allowed transition-colors"
             >
               {isStreaming ? (
-                <svg className="w-5 h-5 animate-spin" fill="none" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                </svg>
+                <>
+                  <svg className="w-4 h-4 animate-spin shrink-0" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                  </svg>
+                  <span>ASKING</span>
+                </>
               ) : (
-                <Send className="w-5 h-5" />
+                <>
+                  <span>ASK</span>
+                  <Send className="w-4 h-4" />
+                </>
               )}
             </button>
-          </div>
-        </div>
-
-        {/* Footer Meta Text */}
-        <div className="flex items-center justify-between text-[11px] text-slate-500 px-1">
-          <div className="flex items-center gap-4 border-slate-700/50">
-             <span className="flex items-center gap-1.5"><Database className="w-3.5 h-3.5" /> Context: Active dataset loaded</span>
-             <span className="flex items-center gap-1.5"><ShieldCheck className="w-3.5 h-3.5" /> Grounded reasoning enabled</span>
-          </div>
-          <div>
-            Press ↵ to send
           </div>
         </div>
       </form>

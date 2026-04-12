@@ -1,9 +1,8 @@
 'use client';
 
-import { useState } from 'react';
+import { memo } from 'react';
 import { Message, OutputPayload, PipelineStep } from '@/types';
 import { ThinkingPill } from './ThinkingPill';
-import { PipelineTrace } from './PipelineTrace';
 import { OutputCard } from '@/components/output/OutputCard';
 import { Bot } from 'lucide-react';
 
@@ -16,7 +15,7 @@ export interface AssistantMessageProps {
   onCorrectionClick?: () => void;
 }
 
-export function AssistantMessage({
+function AssistantMessageImpl({
   message,
   steps = [],
   output,
@@ -24,23 +23,15 @@ export function AssistantMessage({
   showReasoning = false,
   onCorrectionClick,
 }: AssistantMessageProps) {
-  const [localShowTrace, setLocalShowTrace] = useState(false);
-
-  const shouldShowTrace = showReasoning || localShowTrace;
-
   return (
     <div className="flex justify-start mb-6">
       <div className="w-full space-y-4">
-        {/* While streaming, either show the trace (if enabled) or the pill */}
+        {/* While streaming, show the expanding Thinking Pill */}
         {isStreaming && (
-          shouldShowTrace ? (
-            <PipelineTrace steps={steps} />
-          ) : (
-            <ThinkingPill
-              steps={steps}
-              onExpandChange={setLocalShowTrace}
-            />
-          )
+          <ThinkingPill
+            steps={steps}
+            defaultExpanded={showReasoning}
+          />
         )}
 
         {/* Show output card when streaming ends */}
@@ -63,3 +54,5 @@ export function AssistantMessage({
     </div>
   );
 }
+
+export const AssistantMessage = memo(AssistantMessageImpl);

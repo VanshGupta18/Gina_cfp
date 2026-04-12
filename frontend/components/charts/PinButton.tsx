@@ -13,7 +13,7 @@ export function PinButton({
     <button
       onClick={onToggle}
       className={`absolute top-4 right-4 p-2 rounded-lg transition-colors ${
-        isPinned ? 'bg-brand-amber text-white' : 'bg-surface border border-surface-border text-slate-400 hover:text-slate-200'
+        isPinned ? 'bg-brand-indigo text-white shadow-md shadow-brand-indigo/20' : 'bg-surface border border-surface-border text-slate-400 hover:text-slate-200'
       }`}
       aria-label={isPinned ? 'Unpin chart' : 'Pin chart'}
     >

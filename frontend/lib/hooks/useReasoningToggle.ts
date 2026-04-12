@@ -17,6 +17,11 @@ export function useReasoningToggle() {
     setMounted(true);
   }, []);
 
+  const setReasoning = (value: boolean) => {
+    setShowReasoning(value);
+    sessionStorage.setItem(STORAGE_KEY, value ? 'true' : 'false');
+  };
+
   // Persist to sessionStorage on change
   const toggleReasoning = () => {
     setShowReasoning((prev) => {
@@ -28,6 +33,7 @@ export function useReasoningToggle() {
 
   return {
     showReasoning,
+    setReasoning,
     toggleReasoning,
     mounted,
   };

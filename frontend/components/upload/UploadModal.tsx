@@ -6,7 +6,7 @@ import { uploadDataset } from '@/lib/api/datasets';
 import { useDatasets } from '@/lib/hooks/useDatasets';
 import PIISummaryBanner from './PIISummaryBanner';
 import UnderstandingCard from './UnderstandingCard';
-import { CorrectionModal } from './CorrectionModal';
+import { InlineCorrectionPanel } from '@/components/semantic/InlineCorrectionPanel';
 import { UploadCloud, ShieldAlert, CheckCircle2, ChevronRight, X, Sparkles } from 'lucide-react';
 
 interface UploadModalProps {
@@ -249,23 +249,21 @@ export default function UploadModal({ onClose }: UploadModalProps) {
         {/* STEP 3: INTELLIGENCE MAPPING */}
         {step === 3 && understandingCard && (
           <div className="flex flex-col gap-6 animate-in fade-in duration-500">
-            <div className="bg-surface-secondary border-l-2 border-brand-indigo rounded-r-xl p-6 shadow-lg">
-              <div className="flex items-center gap-2 text-xs font-bold tracking-widest text-brand-indigo-light mb-4 uppercase">
-                <Sparkles className="w-3.5 h-3.5" /> G.I.N.A INTELLIGENCE
-              </div>
-              <h3 className="text-lg font-bold text-white mb-2">G.I.N.A understands your dataset</h3>
-              <p className="text-sm text-slate-300 leading-relaxed mb-5">
-                {understandingCard}
-              </p>
-              
-              <div className="w-full flex items-center justify-between text-xs font-medium border-t border-surface-border pt-4">
-                <span className="flex items-center gap-2 text-brand-cyan">
-                  <span className="w-2 h-2 rounded-full bg-brand-cyan animate-pulse"></span>
-                  Processing rows
-                </span>
-                <span className="text-slate-400 text-mono">100% complete</span>
-              </div>
-            </div>
+            <UnderstandingCard 
+              text={understandingCard} 
+              onCorrectionClick={() => setCorrectionModalOpen((prev) => !prev)} 
+            />
+            {correctionModalOpen && uploadedDatasetId && (
+              <InlineCorrectionPanel
+                datasetId={uploadedDatasetId}
+                onClose={() => setCorrectionModalOpen(false)}
+                onSuccess={(state) => {
+                  setUnderstandingCard(state.understandingCard);
+                  setCorrectionModalOpen(false);
+                  void refreshDatasets();
+                }}
+              />
+            )}
 
             <div className="flex justify-between items-center mt-2 border-t border-surface-border pt-6">
               <button onClick={onClose} className="text-sm font-medium text-slate-400 hover:text-white transition">Upload another</button>
@@ -283,16 +281,6 @@ export default function UploadModal({ onClose }: UploadModalProps) {
       </div>
     </div>
 
-    {correctionModalOpen && uploadedDatasetId && (
-      <CorrectionModal
-        datasetId={uploadedDatasetId}
-        onClose={() => setCorrectionModalOpen(false)}
-        onSuccess={() => {
-          setCorrectionModalOpen(false);
-          void refreshDatasets();
-        }}
-      />
-    )}
     </>
   );
 }

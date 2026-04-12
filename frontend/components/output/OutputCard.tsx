@@ -1,6 +1,6 @@
 'use client';
 
-import React from 'react';
+import React, { memo } from 'react';
 import { OutputPayload } from '@/types';
 
 // Child components
@@ -18,7 +18,7 @@ export interface OutputCardProps {
   onCorrectionClick?: () => void;
 }
 
-export function OutputCard({ payload, onCorrectionClick }: OutputCardProps) {
+function OutputCardImpl({ payload, onCorrectionClick }: OutputCardProps) {
   if (!payload) return null;
 
   return (
@@ -73,3 +73,5 @@ export function OutputCard({ payload, onCorrectionClick }: OutputCardProps) {
     </div>
   );
 }
+
+export const OutputCard = memo(OutputCardImpl);

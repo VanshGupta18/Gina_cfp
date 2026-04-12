@@ -1,6 +1,8 @@
 import type { Metadata } from 'next';
 import { Inter, Playfair_Display, JetBrains_Mono } from 'next/font/google';
 import './globals.css';
+import { UIStateProvider } from '@/lib/providers/UIStateProvider';
+import { ToastProvider } from '@/lib/providers/ToastProvider';
 
 const inter = Inter({
   subsets: ['latin'],
@@ -33,7 +35,13 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className={`${inter.variable} ${playfair.variable} ${mono.variable}`}>
-      <body className="antialiased font-sans text-slate-200 bg-slate-950 selection:bg-indigo-500/30">{children}</body>
+      <body className="antialiased font-sans text-slate-200 bg-slate-950 selection:bg-indigo-500/30">
+        <ToastProvider>
+          <UIStateProvider>
+            {children}
+          </UIStateProvider>
+        </ToastProvider>
+      </body>
     </html>
   );
 }
