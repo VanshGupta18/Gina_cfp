@@ -12,6 +12,7 @@
     "@supabase/ssr": "^0.10.2",
     "@supabase/supabase-js": "^2.103.0",
     "clsx": "^2.1.1",
+    "lucide-react": "^1.8.0",
     "next": "15.5.15",
     "papaparse": "^5.5.3",
     "react": "^18.3.1",

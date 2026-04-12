@@ -1,4 +1,4 @@
-# Talk to Data — Architecture
+# GINA — Architecture
 
 *NatWest Code for Purpose Hackathon*
 
@@ -6,7 +6,7 @@
 
 ## System Overview
 
-Talk to Data enables non-technical users to ask natural language questions about their own CSV data and receive instant, plain English answers grounded in real SQL execution. No SQL knowledge required. No dashboards to configure.
+GINA enables non-technical users to ask natural language questions about their own CSV data and receive instant, plain English answers grounded in real SQL execution. No SQL knowledge required. No dashboards to configure.
 
 The architecture follows three validated reference patterns:
 - **TAG (Table-Augmented Generation)** — UC Berkeley / Stanford: ground LLM answers in real table data, not model weights
@@ -442,4 +442,4 @@ If any fallback fires mid-demo, the pipeline trace shows it honestly: `⚠ Using
 
 ---
 
-*Talk to Data — Architecture · NatWest Code for Purpose Hackathon*
+*TGINA — Architecture · NatWest Code for Purpose Hackathon*
