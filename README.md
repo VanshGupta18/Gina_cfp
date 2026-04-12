@@ -8,12 +8,12 @@
 
 **GINA** turns plain English questions into **answers you can trust** over **your own** tabular data. A user uploads a CSV, chats in natural language, and gets **clear explanations**, **charts**, and **transparent SQL**—without writing queries or configuring dashboards.
 
-| | |
-|---|---|
-| **Grounded** | Numbers come from **running real SQL** on **your** dataset in PostgreSQL—not invented from model weights. We follow **Table-Augmented Generation (TAG)**: the model reasons *with* the table, not *instead* of it. |
-| **Insight** | More than a single figure: trends, breakdowns, comparisons, and optional **verification queries** when the pipeline detects explain-style questions. |
+| Feature            | Description |
+|--------------------|-------------|
+| **Grounded**       | Numbers come from **running real SQL** on **your** dataset in PostgreSQL—not invented from model weights. We follow **Table-Augmented Generation (TAG)**: the model reasons *with* the table, not *instead* of it. |
+| **Insight**        | More than a single figure: trends, breakdowns, comparisons, and optional **verification queries** when the pipeline detects explain-style questions. |
 | **Natural language** | You ask in everyday language; a **planner** interprets intent, then specialist steps generate **read-only** SQL and **narration**. |
-| **Analytics** | End-to-end flow from **upload** (client-side PII handling before the network) through **semantic profiling**, **vector-backed schema context** (pgvector), **query pipeline**, and **streaming UI** feedback. |
+| **Analytics**      | End-to-end flow from **upload** (client-side PII handling before the network) through **semantic profiling**, **vector-backed schema context** (pgvector), **query pipeline**, and **streaming UI** feedback. |
 
 ---
 
