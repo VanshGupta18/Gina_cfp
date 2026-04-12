@@ -3,8 +3,9 @@
 # Build (from repository root):
 #   docker build -f backend/Dockerfile -t gina-backend ./backend
 #
-# Run (supply env vars or an env file — do not bake secrets into the image):
-#   docker run --rm -p 3001:3001 --env-file backend/.env gina-backend
+# Run (supply env vars or an env file — do not bake secrets into the image).
+# Map host port 10002 → container 3001 (adjust left side if needed):
+#   docker run --rm -p 10002:3001 --env-file backend/.env gina-backend
 #
 # Compose (see backend/docker-compose.yml):
 #   cd backend && docker compose up --build
