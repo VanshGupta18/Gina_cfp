@@ -39,13 +39,13 @@
       "step": "sql_generation",
       "status": "running",
       "detail": "Generating SQL query",
-      "sqlPath": "ec2"
+      "sqlPath": "groq_maverick"
     },
     {
       "step": "sql_generation",
       "status": "complete",
       "detail": "SQL ready",
-      "sqlPath": "ec2"
+      "sqlPath": "groq_maverick"
     },
     {
       "step": "db_execution",

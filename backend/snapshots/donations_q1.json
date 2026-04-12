@@ -40,13 +40,13 @@
       "step": "sql_generation",
       "status": "running",
       "detail": "Generating SQL query",
-      "sqlPath": "ec2"
+      "sqlPath": "groq_maverick"
     },
     {
       "step": "sql_fallback",
       "status": "warning",
       "detail": "Using backup query method",
-      "originalPath": "ec2",
+      "originalPath": "groq_maverick",
       "fallbackPath": "gemini"
     },
     {

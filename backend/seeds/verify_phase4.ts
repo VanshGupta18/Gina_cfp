@@ -250,9 +250,9 @@ async function main() {
     ok('Gate 7', suggs.map((s) => `"${String(s).substring(0, 40)}"`).join(', '));
   });
 
-  // ── Gate 8: SQL fallback fires when EC2 unreachable ───────────────────────────
-  await check('Gate 8 — SQL fallback step emitted (non-ec2 path)', async () => {
-    // EC2 URL is configured to a dead endpoint, so we expect sql_fallback OR sql_generation with non-ec2 path
+  // ── Gate 8: SQL generated via tier chain (preferred tier may differ from final path) ──
+  await check('Gate 8 — SQL present after tier chain (HF / Maverick / template)', async () => {
+    // Preferred tier depends on planner intent; fallback is normal when not using preferred path
     if (!resultEvent) throw new Error('No result from Gate 1');
     const sqlPath = String(resultEvent.sql ? 'has_sql' : 'no_sql');
     const sql = String(resultEvent.sql ?? '');

@@ -13,13 +13,17 @@ export type NarratorInput = {
   autoInsights: string[];
 };
 
-/** §6.6 – System prompt: plain-English analyst, 2-3 sentences, no markdown. */
-const SYSTEM_PROMPT =
-  'You are a plain English data analyst. Explain the query result clearly and concisely.' +
-  'Identify the main driver if decomposition data is present. ' +
-  'Never invent numbers — use only the data provided. ' +
-  'Use percentages where appropriate. ' +
-  'Keep explanations to 2–3 sentences.';
+/** §6.6 – System prompt: plain-English analyst; trap-aware (rates, periods, vague asks). */
+const SYSTEM_PROMPT = `You are a plain English data analyst. Explain the query result clearly and concisely. Identify the main driver if decomposition data is present. Never invent numbers — use only the data provided. Use percentages (upto 2 decimal places max) where appropriate when they appear in the data.
+
+Length: Usually 2–3 short sentences. If the user asks to summarise trends, key themes, weekly or yearly metrics, or a "year in review", you may use up to 4–5 short sentences (still plain English, no lists or markdown).
+
+Traps to avoid:
+- Partial periods: If comparing years or ranges and the result mixes a full year with a shorter window (e.g. 2025 is only part of a year), say so explicitly and do not treat raw totals as directly comparable unless the data clearly supports it; prefer describing normalised views (e.g. per week or per month) only when those values are in the result.
+- Relative time ("last year", "YTD", "recent"): State your calendar assumption in one phrase (e.g. which year you mean relative to the data) and note if dataset coverage is partial.
+- Vague quality ("performing well", "doing badly"): Do not answer yes/no alone. Name at least one concrete metric from the data and a comparison (e.g. vs other groups or vs another period). If the result does not support a comparison, say what is missing instead of guessing.
+- Small differences: When averages or scores are close across groups, describe them as similar; do not claim a large gap unless the numbers clearly show one.
+- Rates vs counts: When the user asked for a rate, per-unit, or share, describe it as such — do not imply a raw count answers a rate question.`;
 
 function buildUserMessage(input: NarratorInput): string {
   const { question, understandingCard, primaryRows, secondaryRows, autoInsights } = input;
@@ -34,6 +38,7 @@ function buildUserMessage(input: NarratorInput): string {
       ? `AutoInsights detected: ${JSON.stringify(autoInsights)}`
       : 'AutoInsights detected: none',
     '',
+    'Dataset context may describe date coverage; use it when explaining time assumptions.',
     'Respond in plain English only. No markdown, no bullet points, no headers.',
   ].join('\n');
 }
@@ -67,7 +72,7 @@ async function narrateWithGroq(input: NarratorInput): Promise<string> {
       .create({
         model: env.GROQ_MODEL_NARRATOR,
         temperature: 0.3,
-        max_tokens: 256,
+        max_tokens: 320,
         messages: [
           { role: 'system', content: SYSTEM_PROMPT },
           { role: 'user', content: buildUserMessage(input) },

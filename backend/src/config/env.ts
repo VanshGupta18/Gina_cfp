@@ -17,9 +17,6 @@ const envSchema = z.object({
   AWS_S3_BUCKET: z.string().min(1),
   AWS_REGION: z.string().min(1),
 
-  SQLCODER_EC2_URL: z.string().url(),
-  SQLCODER_EC2_TIMEOUT_MS: z.coerce.number().int().positive().default(3000),
-
   HF_API_KEY_1: z.string().min(1),
   HF_API_KEY_2: z.string().default(''),
   SQLCODER_HF_MODEL: z.string().min(1),

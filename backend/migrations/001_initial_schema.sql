@@ -117,7 +117,7 @@ CREATE TABLE IF NOT EXISTS pipeline_runs (
   latency_sql_ms         INTEGER,
   latency_db_ms          INTEGER,
   latency_narrator_ms    INTEGER,
-  sql_path               TEXT,                        -- 'ec2' | 'huggingface' | 'groq_maverick' | 'template'
+  sql_path               TEXT,                        -- 'hf' | 'groq_maverick' | 'template'
   sql_valid              BOOLEAN,
   rows_returned          INTEGER,
   cache_hit              TEXT,                        -- 'response_cache' | 'narration_cache' | 'none'

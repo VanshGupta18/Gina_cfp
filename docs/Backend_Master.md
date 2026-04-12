@@ -89,11 +89,7 @@ AWS_SECRET_ACCESS_KEY=xxx
 AWS_S3_BUCKET=talktodata-uploads
 AWS_REGION=eu-west-2
 
-# EC2 SQLCoder endpoint
-SQLCODER_EC2_URL=http://<ec2-ip>:8080/generate
-SQLCODER_EC2_TIMEOUT_MS=3000
-
-# HuggingFace (SQLCoder fallback + embeddings)
+# HuggingFace (SQL tier for complex_query + embeddings)
 HF_API_KEY_1=hf_xxx
 HF_API_KEY_2=hf_xxx
 SQLCODER_HF_MODEL=defog/sqlcoder-8b
@@ -226,7 +222,7 @@ CREATE TABLE pipeline_runs (
   latency_sql_ms INTEGER,
   latency_db_ms INTEGER,
   latency_narrator_ms INTEGER,
-  sql_path TEXT,                    -- 'ec2' | 'huggingface' | 'groq_maverick' | 'template'
+  sql_path TEXT,                    -- 'hf' | 'groq_maverick' | 'template'
   sql_valid BOOLEAN,
   rows_returned INTEGER,
   cache_hit TEXT,                   -- 'response_cache' | 'narration_cache' | 'none'
@@ -339,13 +335,13 @@ event: step
 data: { step: "planner", status: "complete", detail: "Understood your question — identifying relevant columns", intent: "simple_query", relevantColumns: ["amount","category","quarter"] }
 
 event: step
-data: { step: "sql_generation", status: "running", detail: "Generating SQL query", sqlPath: "ec2" }
+data: { step: "sql_generation", status: "running", detail: "Generating SQL query", sqlPath: "groq_maverick" }  // or "hf" when intent is complex_query
 
 event: step
-data: { step: "sql_generation", status: "complete", detail: "Generating SQL query", sqlPath: "ec2", sql: "SELECT ..." }
+data: { step: "sql_generation", status: "complete", detail: "Generating SQL query", sqlPath: "groq_maverick", sql: "SELECT ..." }
 
 event: step
-data: { step: "sql_fallback", status: "warning", detail: "Using backup query method", originalPath: "ec2", fallbackPath: "template" }
+data: { step: "sql_fallback", status: "warning", detail: "Using backup query method", originalPath: "groq_maverick", fallbackPath: "template" }
 // Only emitted when fallback fires
 
 event: step
@@ -525,25 +521,27 @@ Return JSON only:
 
 ### 6.2 Agent 2 — SQL Generation
 
-Three-tier with timeout-based escalation:
+Order depends on **planner intent** (`simple_query` vs `complex_query`):
+
+**`simple_query` (fast path — HF not called):**
 
 ```
-Tier 1: EC2 SQLCoder-8B
-  - POST {SQLCODER_EC2_URL}/generate
-  - Timeout: 3000ms
-  - On timeout | invalid SQL → Tier 2
+Tier 1: Groq Maverick (SQL prompt)
+Tier 2: Deterministic templates
+```
 
-Tier 2: HuggingFace SQLCoder-8B API
-  - POST https://api-inference.huggingface.co/models/{SQLCODER_HF_MODEL}
-  - Timeout: 8000ms (HF can be slow on cold start)
-  - On timeout | invalid SQL → Tier 3
+**`complex_query` (HF first when Hub/model supports it):**
 
-Tier 3: Groq Llama 4 Maverick 17B
-  - SQL generation prompt (not NL→SQL specialist, but capable enough)
+```
+Tier 1: Hugging Face Inference (textGeneration where supported; else chatCompletion e.g. Featherless for SQLCoder-class models)
+  - Timeout: 8000ms per attempt
+  - On failure | invalid SQL → Tier 2
+
+Tier 2: Groq Maverick (SQL prompt)
   - Timeout: 5000ms
-  - On failure → Tier 4 (templates)
+  - On failure → Tier 3 (templates)
 
-Tier 4: Deterministic templates (zero latency)
+Tier 3: Deterministic templates
 ```
 
 **SQLCoder prompt:**

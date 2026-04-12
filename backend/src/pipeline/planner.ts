@@ -60,8 +60,9 @@ Return JSON only (no markdown) with this shape:
 Rules:
 - intent "conversational" for hi, thanks, what can you do, off-topic — set relevantColumns to [] and relevantTables to []. Optionally set conversationalReply to a short helpful reply.
 - "follow_up_cache" only when the user refers to the immediately previous tabular result and it can be answered without new SQL; set answerFromCache and cacheAnswer appropriately.
-- "simple_query" vs "complex_query": use simple for single aggregation/filter/ranking; complex for multi-step or vague analysis.
-- relevantColumns: raw column names from the schema that matter for SQL.
+- "simple_query" vs "complex_query": use simple for single aggregation/filter/ranking; complex for multi-step analysis, comparisons across time periods, root-cause style questions, or questions that need caveats (partial years, rates vs totals).
+- relevantColumns: raw column names from the schema that matter for SQL. For rates, per-order, per-customer, churn rate, or share questions, include both numerator and denominator columns (e.g. complaints and orders, churned_customers and active_customers) when both exist in the schema.
+- For relative time phrases ("last year", "YTD", "recent", "this quarter") or trend questions, include all date columns needed to filter or group (e.g. year, month, week_start_date, quarter) when present in the schema.
 - relevantTables: physical dataset table name(s) from context (e.g. dataset_xxx).
 
 Schema columns:

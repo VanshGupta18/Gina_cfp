@@ -14,7 +14,7 @@ import {
   storeResponseCache,
 } from '../cache/responseCache.js';
 import type { PlannerIntent } from './planner.js';
-import { generateSql } from './sqlGenerator.js';
+import { generateSql, type SqlGenerationPath } from './sqlGenerator.js';
 import { runPlanner } from './planner.js';
 import { validateSql } from './sqlValidator.js';
 import { executeReadOnlySql, type ResultRow } from './dbExecutor.js';
@@ -576,11 +576,14 @@ export async function runQueryOrchestration(input: QueryOrchestrationInput): Pro
       return;
     }
 
+    const preferredSqlPath: SqlGenerationPath =
+      plan.intent === 'complex_query' ? 'hf' : 'groq_maverick';
+
     await sendStep(reply, {
       step: 'sql_generation',
       status: 'running',
       detail: 'Generating SQL query',
-      sqlPath: 'ec2',
+      sqlPath: preferredSqlPath,
     });
 
     const tSqlStart = Date.now();
@@ -589,11 +592,12 @@ export async function runQueryOrchestration(input: QueryOrchestrationInput): Pro
       tableName,
       columns,
       metricDefinitions: '',
+      sqlTierMode: plan.intent === 'complex_query' ? 'complex' : 'simple',
     });
     tel.latencySqlMs = Date.now() - tSqlStart;
     tel.sqlPath = gen.path;
 
-    if (gen.path !== 'ec2') {
+    if (gen.path !== preferredSqlPath) {
       tel.fallbackTriggered = true;
       tel.fallbackStep = 'sql_generation';
       tel.fallbackTarget = gen.path;
@@ -601,7 +605,7 @@ export async function runQueryOrchestration(input: QueryOrchestrationInput): Pro
         step: 'sql_fallback',
         status: 'warning',
         detail: 'Using backup query method',
-        originalPath: 'ec2',
+        originalPath: preferredSqlPath,
         fallbackPath: gen.path,
       });
     }

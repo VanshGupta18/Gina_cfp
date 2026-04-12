@@ -2,8 +2,16 @@ import {
   InferenceClient,
   InferenceClientHubApiError,
   InferenceClientProviderApiError,
+  setLogger,
 } from '@huggingface/inference';
 import Groq from 'groq-sdk';
+
+/** Silence @huggingface/inference SDK "Defaulting to auto" / provider spam on console.log. */
+setLogger({
+  ...console,
+  log: () => {},
+  debug: () => {},
+});
 import { env } from '../config/env.js';
 import { groqPool, hfPool } from '../ratelimit/keyPool.js';
 import { runGroqQueued } from '../ratelimit/queue.js';
@@ -11,7 +19,10 @@ import type { ColumnProfile } from '../semantic/profiler.js';
 import { tryTemplateSql } from './sqlTemplates.js';
 import { validateSql } from './sqlValidator.js';
 
-export type SqlGenerationPath = 'ec2' | 'hf' | 'groq_maverick' | 'template';
+export type SqlGenerationPath = 'hf' | 'groq_maverick' | 'template';
+
+/** simple: Maverick → template (no HF). complex: HF → Maverick → template. */
+export type SqlTierMode = 'simple' | 'complex';
 
 export type GenerateSqlResult = {
   sql: string;
@@ -21,11 +32,13 @@ export type GenerateSqlResult = {
 const HF_SQL_TIMEOUT_MS = 8000;
 const GROQ_SQL_TIMEOUT_MS = 5000;
 
-function fetchWithTimeout(url: string, init: RequestInit, ms: number): Promise<Response> {
-  const ctrl = new AbortController();
-  const t = setTimeout(() => ctrl.abort(), ms);
-  return fetch(url, { ...init, signal: ctrl.signal }).finally(() => clearTimeout(t));
-}
+/** Shared SQL-generation rules (user prompt + Groq system) — rates vs counts, time grain. */
+const SQL_ANSWERING_RULES = `Rates, ratios, and "per X": If the question asks for a rate, per order, per customer, complaints per order, churn rate, NPS, or any share/percentage, compute SUM(numerator_column)::numeric / NULLIF(SUM(denominator_column), 0) at the requested grain (with GROUP BY as needed), using exact column names from the schema. Do not use SUM of a single count column alone when a rate or "per" was asked—include the correct denominator (e.g. orders, active_customers) from the schema.
+Time grain: If the question refers to weeks, months, quarters, years, trends, "when", or compares periods, filter and/or GROUP BY the appropriate date columns from the schema (e.g. week_start_date, year, month, quarter)—do not return one global total when the question asks for a time breakdown or period-specific pattern.`;
+
+const GROQ_SQL_SYSTEM_PROMPT = `You output a single PostgreSQL SELECT statement only. No markdown, no explanation.
+
+${SQL_ANSWERING_RULES}`;
 
 function buildSqlCoderPrompt(params: {
   question: string;
@@ -54,6 +67,7 @@ ${params.metricDefinitions || 'None'}
 - Use parameterised-style literals (no $1 $2 — inline safe values only).
 - Limit result rows to 100 maximum.
 - Handle NULL values with COALESCE where appropriate.
+${SQL_ANSWERING_RULES.split('\n').map((line) => `- ${line}`).join('\n')}
 
 ### Question
 ${params.question}
@@ -70,44 +84,6 @@ function extractSqlFromLooseText(text: string): string {
   return trimmed;
 }
 
-function tryParseSqlField(obj: unknown): string | null {
-  if (!obj || typeof obj !== 'object') return null;
-  const r = obj as Record<string, unknown>;
-  for (const k of ['sql', 'generated_sql', 'query', 'statement', 'output']) {
-    const v = r[k];
-    if (typeof v === 'string' && v.toLowerCase().includes('select')) {
-      return extractSqlFromLooseText(v);
-    }
-  }
-  return null;
-}
-
-async function tierEc2(prompt: string): Promise<string | null> {
-  const url = env.SQLCODER_EC2_URL;
-  const res = await fetchWithTimeout(
-    url,
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ prompt, question: prompt }),
-    },
-    env.SQLCODER_EC2_TIMEOUT_MS,
-  );
-  if (!res.ok) return null;
-  const text = await res.text();
-  try {
-    const j = JSON.parse(text) as unknown;
-    const fromField = tryParseSqlField(j);
-    if (fromField) return fromField;
-  } catch {
-    /* plain text */
-  }
-  if (text.toLowerCase().includes('select')) {
-    return extractSqlFromLooseText(text);
-  }
-  return null;
-}
-
 function logSqlTier(message: string, extra?: unknown): void {
   if (!env.SQL_TIER_LOG) return;
   if (extra !== undefined) {
@@ -117,29 +93,69 @@ function logSqlTier(message: string, extra?: unknown): void {
   }
 }
 
+function isAbortError(e: unknown): boolean {
+  return (
+    e instanceof Error &&
+    (e.name === 'AbortError' || /aborted|abort/i.test(e.message))
+  );
+}
+
+/**
+ * Hugging Face SQL tier: `textGeneration` (hf-inference, then auto), then `chatCompletion`
+ * (featherless-ai, then auto). Some models are Hub-mapped only as conversational (e.g. SQLCoder on
+ * Featherless) — the key is valid but `textGeneration` cannot succeed for those.
+ */
 async function tierHf(prompt: string): Promise<string | null> {
   const model = env.SQLCODER_HF_MODEL;
   const key = hfPool.next();
-  const ctrl = new AbortController();
-  const t = setTimeout(() => ctrl.abort(), HF_SQL_TIMEOUT_MS);
-  try {
-    const client = new InferenceClient(key);
-    // Do not set `provider: 'hf-inference'` — many models are routed only via other Inference
-    // Providers (Together, Groq, etc.). Omitting provider uses Hub "auto" routing (see HF settings).
-    const data = await client.textGeneration(
-      {
-        model,
-        inputs: prompt,
-        parameters: { max_new_tokens: 256 },
-      },
-      { signal: ctrl.signal },
-    );
-    if (data && typeof data.generated_text === 'string') {
-      return extractSqlFromLooseText(data.generated_text);
+
+  const runTextGeneration = async (label: 'hf-inference' | 'auto', provider?: 'hf-inference') => {
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), HF_SQL_TIMEOUT_MS);
+    try {
+      const client = new InferenceClient(key);
+      const data = await client.textGeneration(
+        {
+          model,
+          inputs: prompt,
+          parameters: { max_new_tokens: 256 },
+          ...(provider ? { provider } : {}),
+        },
+        { signal: ctrl.signal },
+      );
+      if (data && typeof data.generated_text === 'string') {
+        return extractSqlFromLooseText(data.generated_text);
+      }
+      logSqlTier('HF textGeneration returned no generated_text', { model, label });
+      return null;
+    } finally {
+      clearTimeout(t);
     }
-    logSqlTier('HF textGeneration returned no generated_text', { model });
-    return null;
+  };
+
+  let firstOut: string | null = null;
+  try {
+    firstOut = await runTextGeneration('hf-inference', 'hf-inference');
   } catch (e) {
+    if (isAbortError(e)) {
+      logSqlTier('HF hf-inference request timed out or aborted', { model });
+      return null;
+    }
+    logSqlTier('HF hf-inference attempt failed; retrying with provider auto', {
+      model,
+      message: e instanceof Error ? e.message : String(e),
+    });
+  }
+  if (firstOut !== null) return firstOut;
+
+  try {
+    const fallback = await runTextGeneration('auto');
+    if (fallback !== null) return fallback;
+  } catch (e) {
+    if (isAbortError(e)) {
+      logSqlTier('HF auto-provider request timed out or aborted', { model });
+      return null;
+    }
     if (e instanceof InferenceClientProviderApiError || e instanceof InferenceClientHubApiError) {
       logSqlTier('HF Hub or inference HTTP error', {
         model,
@@ -152,10 +168,76 @@ async function tierHf(prompt: string): Promise<string | null> {
         message: e instanceof Error ? e.message : String(e),
       });
     }
-    return null;
-  } finally {
-    clearTimeout(t);
   }
+
+  // Many Hub models (e.g. defog/llama-3-sqlcoder-8b) are mapped only as conversational on
+  // Featherless — textGeneration never works; chatCompletion does with a valid HF token.
+  const runChatCompletion = async (
+    label: 'featherless-ai' | 'auto',
+    provider?: 'featherless-ai',
+  ): Promise<string | null> => {
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), HF_SQL_TIMEOUT_MS);
+    try {
+      const client = new InferenceClient(key);
+      const out = await client.chatCompletion(
+        {
+          model,
+          messages: [{ role: 'user', content: prompt }],
+          max_tokens: 256,
+          temperature: 0,
+          ...(provider ? { provider } : {}),
+        },
+        { signal: ctrl.signal },
+      );
+      const text = out.choices?.[0]?.message?.content;
+      if (typeof text === 'string' && text.trim()) {
+        return extractSqlFromLooseText(text);
+      }
+      logSqlTier('HF chatCompletion returned no assistant content', { model, label });
+      return null;
+    } finally {
+      clearTimeout(t);
+    }
+  };
+
+  try {
+    const cc = await runChatCompletion('featherless-ai', 'featherless-ai');
+    if (cc !== null) return cc;
+  } catch (e) {
+    if (isAbortError(e)) {
+      logSqlTier('HF chatCompletion (featherless-ai) timed out or aborted', { model });
+      return null;
+    }
+    logSqlTier('HF chatCompletion featherless-ai failed; retrying auto', {
+      model,
+      message: e instanceof Error ? e.message : String(e),
+    });
+  }
+
+  try {
+    const ccAuto = await runChatCompletion('auto');
+    if (ccAuto !== null) return ccAuto;
+  } catch (e) {
+    if (isAbortError(e)) {
+      logSqlTier('HF chatCompletion (auto) timed out or aborted', { model });
+      return null;
+    }
+    if (e instanceof InferenceClientProviderApiError || e instanceof InferenceClientHubApiError) {
+      logSqlTier('HF chatCompletion HTTP error', {
+        model,
+        status: e.httpResponse?.status,
+        message: e.message,
+      });
+    } else {
+      logSqlTier('HF chatCompletion failed', {
+        model,
+        message: e instanceof Error ? e.message : String(e),
+      });
+    }
+  }
+
+  return null;
 }
 
 async function tierGroqMaverick(prompt: string): Promise<string | null> {
@@ -169,8 +251,7 @@ async function tierGroqMaverick(prompt: string): Promise<string | null> {
         messages: [
           {
             role: 'system',
-            content:
-              'You output a single PostgreSQL SELECT statement only. No markdown, no explanation.',
+            content: GROQ_SQL_SYSTEM_PROMPT,
           },
           { role: 'user', content: prompt },
         ],
@@ -193,15 +274,17 @@ async function tierGroqMaverick(prompt: string): Promise<string | null> {
 }
 
 /**
- * §6.2 — EC2 → HF → Groq Maverick → §6.4 templates. Validates after each tier.
+ * §6.2 — Planner intent: `simple` → Maverick → templates; `complex` → HF → Maverick → templates.
+ * Validates after each tier.
  */
 export async function generateSql(params: {
   question: string;
   tableName: string;
   columns: ColumnProfile[];
   metricDefinitions?: string;
+  sqlTierMode: SqlTierMode;
 }): Promise<GenerateSqlResult> {
-  const { question, tableName, columns, metricDefinitions = '' } = params;
+  const { question, tableName, columns, metricDefinitions = '', sqlTierMode } = params;
   const prompt = buildSqlCoderPrompt({ question, tableName, columns, metricDefinitions });
   const allowedTables = [tableName];
 
@@ -214,27 +297,28 @@ export async function generateSql(params: {
     return null;
   };
 
-  const ec2 = await tierEc2(prompt).catch(() => null);
-  const a = tryTier(ec2, 'ec2');
-  if (a) return a;
-
-  const hf = await tierHf(prompt).catch(() => null);
-  if (hf && env.SQL_TIER_LOG) {
-    const vr = validateSql(hf, allowedTables);
-    if (!vr.valid) {
-      logSqlTier('HF produced SQL that failed validation', { reason: vr.reason, preview: hf.slice(0, 280) });
+  if (sqlTierMode === 'complex') {
+    const hf = await tierHf(prompt).catch(() => null);
+    if (hf && env.SQL_TIER_LOG) {
+      const vr = validateSql(hf, allowedTables);
+      if (!vr.valid) {
+        logSqlTier('HF produced SQL that failed validation', {
+          reason: vr.reason,
+          preview: hf.slice(0, 280),
+        });
+      }
     }
+    const hb = tryTier(hf, 'hf');
+    if (hb) return hb;
   }
-  const b = tryTier(hf, 'hf');
-  if (b) return b;
 
   const gq = await tierGroqMaverick(prompt).catch(() => null);
-  const c = tryTier(gq, 'groq_maverick');
-  if (c) return c;
+  const gc = tryTier(gq, 'groq_maverick');
+  if (gc) return gc;
 
   const tmpl = tryTemplateSql(question, tableName, columns);
-  const d = tryTier(tmpl, 'template');
-  if (d) return d;
+  const td = tryTier(tmpl, 'template');
+  if (td) return td;
 
   throw new Error(
     'SQL generation failed: all tiers exhausted or produced invalid SQL for this question/schema',

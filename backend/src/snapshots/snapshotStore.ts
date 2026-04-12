@@ -176,13 +176,13 @@ export function defaultSimulatedSteps(rowCount: number): Record<string, unknown>
       step: 'sql_generation',
       status: 'running',
       detail: 'Generating SQL query',
-      sqlPath: 'ec2',
+      sqlPath: 'groq_maverick',
     },
     {
       step: 'sql_generation',
       status: 'complete',
       detail: 'SQL ready',
-      sqlPath: 'ec2',
+      sqlPath: 'groq_maverick',
     },
     { step: 'db_execution', status: 'running', detail: 'Executing against your data' },
     {

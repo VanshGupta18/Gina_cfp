@@ -318,7 +318,7 @@ psql "$DATABASE_URL" -c "SELECT title FROM conversations WHERE id = '<id>';"
 # Expected: truncated version of the first question
 
 # 5. Fallback fires when EC2 is unreachable
-# Set SQLCODER_EC2_URL to an invalid host, send query
+# Send query; SQL tier uses planner intent (simple: Maverick first; complex: HF first)
 # Expected: step event with sql_fallback warning, query still succeeds via HF or Groq or template
 
 # 6. Conversational intent skips SQL
