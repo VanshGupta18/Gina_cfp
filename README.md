@@ -80,8 +80,8 @@ Full dependency lists: [`backend/package.json`](backend/package.json), [`fronten
 ### Clone
 
 ```bash
-git clone https://github.com/<your-username>/<repository>.git
-cd <repository>
+git clone https://github.com/vanshGupta18/Gina_cfp.git
+cd Gina_cfp
 ```
 
 ### Backend
