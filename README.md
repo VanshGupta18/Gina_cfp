@@ -37,7 +37,7 @@ Design patterns (TAG-style grounding, collaborating-agent routing, tiered models
 
 ---
 
-## What judges see in the app
+## What is in the app
 
 - A **chat** with **live pipeline steps** (planner → SQL → execution → narration) over **SSE**.
 - **Grounded outputs**: copy and visuals tied to **executed** queries, with **SQL disclosure**.
