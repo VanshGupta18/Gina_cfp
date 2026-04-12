@@ -128,6 +128,44 @@ export default async function datasetsRoutes(fastify: FastifyInstance) {
     };
   });
 
+  // GET /api/datasets/:datasetId — get a single dataset by ID
+  fastify.get<{ Params: { datasetId: string } }>(
+    '/datasets/:datasetId',
+    async (request, reply) => {
+      const { datasetId } = request.params;
+
+      const { rows } = await fastify.db.query<{
+        id: string;
+        name: string;
+        row_count: number | null;
+        column_count: number | null;
+        is_demo: boolean;
+        demo_slug: string | null;
+        created_at: string;
+      }>(
+        `SELECT id, name, row_count, column_count, is_demo, demo_slug, created_at
+         FROM datasets
+         WHERE id = $1 AND (user_id = $2 OR is_demo = true)`,
+        [datasetId, request.userId],
+      );
+
+      if (rows.length === 0) {
+        return reply.status(404).send({ error: 'Dataset not found' });
+      }
+
+      const r = rows[0];
+      return {
+        id: r.id,
+        name: r.name,
+        rowCount: r.row_count,
+        columnCount: r.column_count,
+        isDemo: r.is_demo,
+        demoSlug: r.demo_slug,
+        createdAt: r.created_at,
+      };
+    },
+  );
+
   // GET /api/datasets/:datasetId/semantic — get semantic state for a dataset
   fastify.get<{ Params: { datasetId: string } }>(
     '/datasets/:datasetId/semantic',
