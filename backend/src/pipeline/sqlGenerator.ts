@@ -1,3 +1,8 @@
+import {
+  InferenceClient,
+  InferenceClientHubApiError,
+  InferenceClientProviderApiError,
+} from '@huggingface/inference';
 import Groq from 'groq-sdk';
 import { env } from '../config/env.js';
 import { groqPool, hfPool } from '../ratelimit/keyPool.js';
@@ -103,38 +108,54 @@ async function tierEc2(prompt: string): Promise<string | null> {
   return null;
 }
 
+function logSqlTier(message: string, extra?: unknown): void {
+  if (!env.SQL_TIER_LOG) return;
+  if (extra !== undefined) {
+    console.warn(`[sql:tier] ${message}`, extra);
+  } else {
+    console.warn(`[sql:tier] ${message}`);
+  }
+}
+
 async function tierHf(prompt: string): Promise<string | null> {
   const model = env.SQLCODER_HF_MODEL;
-  const url = `https://api-inference.huggingface.co/models/${encodeURIComponent(model)}`;
   const key = hfPool.next();
-  const res = await fetchWithTimeout(
-    url,
-    {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${key}`,
-        'Content-Type': 'application/json',
+  const ctrl = new AbortController();
+  const t = setTimeout(() => ctrl.abort(), HF_SQL_TIMEOUT_MS);
+  try {
+    const client = new InferenceClient(key);
+    // Do not set `provider: 'hf-inference'` — many models are routed only via other Inference
+    // Providers (Together, Groq, etc.). Omitting provider uses Hub "auto" routing (see HF settings).
+    const data = await client.textGeneration(
+      {
+        model,
+        inputs: prompt,
+        parameters: { max_new_tokens: 256 },
       },
-      body: JSON.stringify({ inputs: prompt, parameters: { max_new_tokens: 256 } }),
-    },
-    HF_SQL_TIMEOUT_MS,
-  );
-  if (!res.ok) return null;
-  const data: unknown = await res.json();
-  if (typeof data === 'string') {
-    return extractSqlFromLooseText(data);
-  }
-  if (Array.isArray(data) && data[0] && typeof data[0] === 'object') {
-    const row = data[0] as Record<string, unknown>;
-    if (typeof row.generated_text === 'string') {
-      return extractSqlFromLooseText(row.generated_text);
+      { signal: ctrl.signal },
+    );
+    if (data && typeof data.generated_text === 'string') {
+      return extractSqlFromLooseText(data.generated_text);
     }
+    logSqlTier('HF textGeneration returned no generated_text', { model });
+    return null;
+  } catch (e) {
+    if (e instanceof InferenceClientProviderApiError || e instanceof InferenceClientHubApiError) {
+      logSqlTier('HF Hub or inference HTTP error', {
+        model,
+        status: e.httpResponse?.status,
+        message: e.message,
+      });
+    } else {
+      logSqlTier('HF inference failed', {
+        model,
+        message: e instanceof Error ? e.message : String(e),
+      });
+    }
+    return null;
+  } finally {
+    clearTimeout(t);
   }
-  if (data && typeof data === 'object') {
-    const fromField = tryParseSqlField(data);
-    if (fromField) return fromField;
-  }
-  return null;
 }
 
 async function tierGroqMaverick(prompt: string): Promise<string | null> {
@@ -198,6 +219,12 @@ export async function generateSql(params: {
   if (a) return a;
 
   const hf = await tierHf(prompt).catch(() => null);
+  if (hf && env.SQL_TIER_LOG) {
+    const vr = validateSql(hf, allowedTables);
+    if (!vr.valid) {
+      logSqlTier('HF produced SQL that failed validation', { reason: vr.reason, preview: hf.slice(0, 280) });
+    }
+  }
   const b = tryTier(hf, 'hf');
   if (b) return b;
 

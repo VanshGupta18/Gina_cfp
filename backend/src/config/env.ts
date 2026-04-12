@@ -37,6 +37,8 @@ const envSchema = z.object({
   GEMINI_MODEL: z.string().min(1),
 
   USE_GEMINI_NARRATOR: boolFromEnv,
+  /** When true, log Hugging Face SQL tier errors and invalid HF SQL validation reasons to stderr (dev/debug). */
+  SQL_TIER_LOG: boolFromEnv,
   SNAPSHOT_MODE: boolFromEnv,
   SQL_FALLBACK_TIMEOUT_MS: z.coerce.number().int().positive().default(3000),
   SECONDARY_QUERY_DELTA_THRESHOLD: z.coerce.number().positive().default(0.05),

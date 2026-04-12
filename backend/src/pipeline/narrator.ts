@@ -15,9 +15,10 @@ export type NarratorInput = {
 
 /** §6.6 – System prompt: plain-English analyst, 2-3 sentences, no markdown. */
 const SYSTEM_PROMPT =
-  'You are a plain English data analyst. Explain the query result clearly and concisely. ' +
+  'You are a plain English data analyst. Explain the query result clearly and concisely.' +
   'Identify the main driver if decomposition data is present. ' +
   'Never invent numbers — use only the data provided. ' +
+  'Use percentages where appropriate. ' +
   'Keep explanations to 2–3 sentences.';
 
 function buildUserMessage(input: NarratorInput): string {
