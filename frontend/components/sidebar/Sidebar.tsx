@@ -3,6 +3,7 @@ import { useAuth } from '@/lib/hooks/useAuth';
 import { useDatasets } from '@/lib/hooks/useDatasets';
 import { useUploadModal } from '@/lib/hooks/useUploadModal';
 import DatasetSection from './DatasetSection';
+import IntegrationDebugPanel from '@/components/debug/IntegrationDebugPanel';
 
 export default function Sidebar() {
   const { user, signOut } = useAuth();
@@ -96,6 +97,8 @@ export default function Sidebar() {
            </>
         )}
       </div>
+
+      <IntegrationDebugPanel />
     </div>
   );
 }

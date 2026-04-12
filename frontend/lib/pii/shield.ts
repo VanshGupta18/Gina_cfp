@@ -66,7 +66,7 @@ function looksLikeDateOrPlainDatetime(value: string): boolean {
   return false;
 }
 
-const VALUE_REGEXES: Record<string, RegExp> = {
+const VALUE_REGEXES = {
   REDACTED_EMAIL: /^[^\s@]+@[^\s@]+\.[^\s@]+$/i,
   /**
    * Indian mobile (+91 / 0 / bare 10 digits, first digit 6–9).
@@ -88,7 +88,10 @@ const VALUE_REGEXES: Record<string, RegExp> = {
   REDACTED_AADHAAR: /^\d{4}\s\d{4}\s\d{4}$/,
   /** 8 digits — exclude values that are valid YYYYMMDD dates (handled above). */
   REDACTED_ACCOUNT: /^\d{8}$/,
-};
+} as const;
+
+type ValueRedactionTag = keyof typeof VALUE_REGEXES;
+type ColumnRedactionTag = 'REDACTED_CONFIDENTIAL' | ValueRedactionTag;
 
 export async function runPIIShield(file: File): Promise<PIIRedactionResult> {
   return new Promise((resolve, reject) => {
@@ -111,7 +114,7 @@ export async function runPIIShield(file: File): Promise<PIIRedactionResult> {
               header,
               isHeaderMatch,
               skipValueHeuristics,
-              redactionType: isHeaderMatch ? ('REDACTED_CONFIDENTIAL' as const) : null,
+              redactionType: (isHeaderMatch ? 'REDACTED_CONFIDENTIAL' : null) as ColumnRedactionTag | null,
             };
           });
 
@@ -125,8 +128,9 @@ export async function runPIIShield(file: File): Promise<PIIRedactionResult> {
               if (!val) continue;
               if (looksLikeDateOrPlainDatetime(val)) continue;
 
-              let matchedType: string | null = null;
-              for (const [type, regex] of Object.entries(VALUE_REGEXES)) {
+              let matchedType: ColumnRedactionTag | null = null;
+              for (const type of Object.keys(VALUE_REGEXES) as ValueRedactionTag[]) {
+                const regex = VALUE_REGEXES[type];
                 if (type === 'REDACTED_ACCOUNT' && /^\d{8}$/.test(val)) {
                   const y = Number.parseInt(val.slice(0, 4), 10);
                   const mo = Number.parseInt(val.slice(4, 6), 10);

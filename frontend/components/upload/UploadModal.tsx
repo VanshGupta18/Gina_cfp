@@ -28,43 +28,42 @@ export default function UploadModal({ onClose }: UploadModalProps) {
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const handleProcessFile = async (file: File) => {
-    if (!file.name.toLowerCase().endsWith('.csv')) {
-      setError('Please upload a .csv file');
-      return;
-    }
-    if (file.size > 50 * 1024 * 1024) {
-      setError('File size must be under 50MB');
-      return;
-    }
+  const handleProcessFile = useCallback(
+    async (file: File) => {
+      if (!file.name.toLowerCase().endsWith('.csv')) {
+        setError('Please upload a .csv file');
+        return;
+      }
+      if (file.size > 50 * 1024 * 1024) {
+        setError('File size must be under 50MB');
+        return;
+      }
 
-    setIsProcessing(true);
-    setError(null);
-    setRedactedColumns([]);
-    setUploadedDatasetId(null);
-    setCorrectionModalOpen(false);
-    
-    try {
-      // 1. Run PII Shield locally
-      const { redactedFile, redactedColumns: cols } = await runPIIShield(file);
-      setRedactedColumns(cols);
+      setIsProcessing(true);
+      setError(null);
+      setRedactedColumns([]);
+      setUploadedDatasetId(null);
+      setCorrectionModalOpen(false);
 
-      // 2. Upload redacted file
-      const result = await uploadDataset(redactedFile);
-      
-      // 3. Success state
-      setUnderstandingCard(result.understandingCard);
-      setUploadedDatasetId(result.dataset.id);
-      setUploadComplete(true);
-      await refreshDatasets();
-      
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'Failed to process and upload dataset';
-      setError(message);
-    } finally {
-      setIsProcessing(false);
-    }
-  };
+      try {
+        const { redactedFile, redactedColumns: cols } = await runPIIShield(file);
+        setRedactedColumns(cols);
+
+        const result = await uploadDataset(redactedFile);
+
+        setUnderstandingCard(result.understandingCard);
+        setUploadedDatasetId(result.dataset.id);
+        setUploadComplete(true);
+        await refreshDatasets();
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : 'Failed to process and upload dataset';
+        setError(message);
+      } finally {
+        setIsProcessing(false);
+      }
+    },
+    [refreshDatasets],
+  );
 
   const onDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -76,20 +75,25 @@ export default function UploadModal({ onClose }: UploadModalProps) {
     setIsDragging(false);
   }, []);
 
-  const onDrop = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragging(false);
-    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-      handleProcessFile(e.dataTransfer.files[0]);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [handleProcessFile]);
+  const onDrop = useCallback(
+    (e: React.DragEvent) => {
+      e.preventDefault();
+      setIsDragging(false);
+      if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+        void handleProcessFile(e.dataTransfer.files[0]);
+      }
+    },
+    [handleProcessFile],
+  );
 
-  const onFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files.length > 0) {
-      handleProcessFile(e.target.files[0]);
-    }
-  };
+  const onFileChange = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      if (e.target.files && e.target.files.length > 0) {
+        void handleProcessFile(e.target.files[0]);
+      }
+    },
+    [handleProcessFile],
+  );
 
   return (
     <>

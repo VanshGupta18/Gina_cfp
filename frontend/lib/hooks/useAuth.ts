@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import type { User, Session } from '@supabase/supabase-js';
 import { createClient } from '@/lib/supabase/client';
+import { syncUserProfile } from '@/lib/api/users';
 
 interface UseAuthReturn {
   user: User | null;
@@ -17,17 +18,10 @@ export function useAuth(): UseAuthReturn {
   const [isLoading, setIsLoading] = useState(true);
   const supabase = createClient();
 
-  // Fire-and-forget user sync to backend
-  const syncUser = useCallback(async (accessToken: string) => {
+  // Fire-and-forget user sync to backend (same path as E2E POST /api/users/sync)
+  const syncUser = useCallback(async () => {
     try {
-      await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/api/users/sync`, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-          'Content-Type': 'application/json',
-        },
-        body: '{}',
-      });
+      await syncUserProfile();
     } catch {
       // Non-critical — don't block UI on sync failure
     }
@@ -40,7 +34,7 @@ export function useAuth(): UseAuthReturn {
       setUser(session?.user ?? null);
       setIsLoading(false);
       if (session?.access_token) {
-        syncUser(session.access_token);
+        void syncUser();
       }
     });
 
@@ -54,7 +48,7 @@ export function useAuth(): UseAuthReturn {
 
       // Sync user to backend on sign-in
       if (session?.access_token) {
-        syncUser(session.access_token);
+        void syncUser();
       }
     });
 

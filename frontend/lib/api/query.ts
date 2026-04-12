@@ -1,4 +1,5 @@
 import { QueryPayload } from '@/types';
+import { formatApiFailure, queryHttpError } from '@/lib/api/errors';
 
 export interface SSEEvent {
   event: string;
@@ -19,23 +20,29 @@ export async function* streamQuery(
     throw new Error('NEXT_PUBLIC_API_BASE_URL is required');
   }
 
-  const response = await fetch(`${base}/api/query`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Accept: 'text/event-stream',
-      Authorization: `Bearer ${token}`,
-    },
-    body: JSON.stringify(payload),
-  });
+  const url = `${base}/api/query`;
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'text/event-stream',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify(payload),
+    });
+  } catch (err) {
+    throw new Error(formatApiFailure(err, { url, method: 'POST' }));
+  }
 
   if (!response.ok) {
-    const error = await response.text();
-    throw new Error(`Query failed: ${response.status} ${error}`);
+    const bodyText = await response.text();
+    throw queryHttpError(response.status, bodyText, url);
   }
 
   if (!response.body) {
-    throw new Error('No response body');
+    throw new Error('No response body from query stream');
   }
 
   const reader = response.body.getReader();

@@ -1,5 +1,5 @@
 import { createBrowserClient } from '@supabase/ssr';
-import { formatApiFailure } from '@/lib/api/errors';
+import { formatApiFailure, messageFromApiErrorPayload } from '@/lib/api/errors';
 
 /**
  * Typed fetch wrapper that automatically attaches JWT from Supabase session
@@ -66,23 +66,9 @@ export async function apiFetch<T>(
 
     // Handle errors
     if (!response.ok) {
-      let errorMessage: string;
-      if (typeof data === 'object' && data !== null && 'error' in data) {
-        errorMessage = (data as { error: string }).error;
-        if (
-          'details' in data &&
-          typeof (data as { details?: unknown }).details === 'object' &&
-          (data as { details?: { fieldErrors?: Record<string, string[]> } }).details?.fieldErrors
-        ) {
-          const fe = (data as { details: { fieldErrors?: Record<string, string[]> } }).details
-            .fieldErrors;
-          const first = fe && Object.values(fe).flat()[0];
-          if (first) errorMessage = `${errorMessage}: ${first}`;
-        }
-      } else {
-        errorMessage = `HTTP ${response.status}`;
-      }
-
+      const fromPayload =
+        typeof data === 'object' && data !== null ? messageFromApiErrorPayload(data) : null;
+      const errorMessage = fromPayload ?? `HTTP ${response.status}`;
       throw new Error(`API Error: ${errorMessage}`);
     }
 

@@ -45,8 +45,8 @@ export function usePipeline() {
             const resultData = event.data as OutputPayload;
             setResult(resultData);
           } else if (event.event === 'error') {
-            // Stream error
-            throw new Error(`Stream error: ${JSON.stringify(event.data)}`);
+            const errPayload = event.data as { message?: string; recoverable?: boolean };
+            throw new Error(errPayload.message ?? 'Pipeline reported an error');
           }
         }
       } catch (err: unknown) {
