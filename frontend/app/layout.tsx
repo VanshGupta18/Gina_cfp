@@ -1,5 +1,5 @@
 import type { Metadata } from 'next';
-import { Inter } from 'next/font/google';
+import { Inter, Playfair_Display, JetBrains_Mono } from 'next/font/google';
 import './globals.css';
 
 const inter = Inter({
@@ -8,10 +8,22 @@ const inter = Inter({
   display: 'swap',
 });
 
+const playfair = Playfair_Display({
+  subsets: ['latin'],
+  variable: '--font-serif',
+  display: 'swap',
+});
+
+const mono = JetBrains_Mono({
+  subsets: ['latin'],
+  variable: '--font-mono',
+  display: 'swap',
+});
+
 export const metadata: Metadata = {
-  title: 'Talk to Data — Ask your data anything',
+  title: 'G.I.N.A — Grounded Insight from Natural Language Analytics',
   description:
-    'Upload a CSV. Ask a question in plain English. Get instant answers with charts — no SQL, no dashboards.',
+    'Ask your data anything. Upload a CSV — get plain English answers instantly. No SQL, no dashboards, no guesswork.',
 };
 
 export default function RootLayout({
@@ -20,8 +32,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={inter.variable}>
-      <body className="antialiased font-sans">{children}</body>
+    <html lang="en" className={`${inter.variable} ${playfair.variable} ${mono.variable}`}>
+      <body className="antialiased font-sans text-slate-200 bg-slate-950 selection:bg-indigo-500/30">{children}</body>
     </html>
   );
 }
