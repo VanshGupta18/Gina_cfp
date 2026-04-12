@@ -349,21 +349,21 @@ Renders after `result` SSE event. Replaces the thinking state inline.
 │                                             │
 │  Solar Equipment was your top category...   │  ← Narrative (2–3 sentences)
 │                                             │
-│  [▼ See chart]          [📌 Pin]           │  ← Expand toggle + Pin button
+│  [▼ See chart]          [📌 Pin]            │  ← Expand toggle + Pin button
 │                                             │
-│  ┌─────────────────────────┐               │
-│  │  [CHART renders here]   │               │  ← Collapses by default
-│  └─────────────────────────┘               │
+│  ┌─────────────────────────┐                │
+│  │  [CHART renders here]   │                │  ← Collapses by default
+│  └─────────────────────────┘                │
 │                                             │
 │  based on: amount · category · quarter      │  ← CitationChips
 │  [▶ See how this was calculated]            │  ← SQL expand accordion
-│  Confidence: ████████░░  82%               │  ← ConfidenceIndicator
+│  Confidence: ████████░░  82%                │  ← ConfidenceIndicator
 │  ─────────────────────────────────────────  │
 │  Try asking:                                │
 │  [Which area drove the change?]             │  ← FollowUpSuggestions (pills)
-│  [How does Q1 compare to Q2?]              │
+│  [How does Q1 compare to Q2?]               │
 │                                             │
-│  Something off? ↗                          │  ← SomethingOff link
+│  Something off? ↗                           │  ← SomethingOff link
 └─────────────────────────────────────────────┘
 ```
 
@@ -374,9 +374,9 @@ Renders after `result` SSE event. Replaces the thinking state inline.
 ### 4.7 Chart Type Reference
 
 | `chartType` from backend | Component | Recharts component | Notes |
-|---|---|---|---|
+|--------------|-----------------|---------------------|------------------------------------|
 | `big_number` | `BigNumberCard` | None (plain render) | Large number + label. No Recharts. |
-| `bar` | `BarChart` | `BarChart` horizontal | Category on Y-axis, value on X-axis. |
+| `bar`        | `BarChart` | `BarChart` horizontal | Category on Y-axis, value on X-axis. |
 | `line` | `LineChart` | `LineChart` | X-axis = period labels. |
 | `grouped_bar` | `GroupedBarChart` | `BarChart` grouped | Side-by-side, two datasets. |
 | `stacked_bar` | `StackedBarChart` | `BarChart` stacked | % labels on segments. |
@@ -670,7 +670,7 @@ All server state managed via direct API calls + local `useState`. No global cach
 ## 9. Key UX Micro-Interactions
 
 | Interaction | Behaviour |
-|---|---|
+|--------------------|---------------------------------------------------------------------------------------|
 | User sends message | Input disabled immediately. ThinkingPill appears. Input re-enables on `result` event. |
 | Follow-up suggestion clicked | Pill populates the input bar (does not auto-submit). User hits enter or send. |
 | Pinning a chart | Chart panel slides in from right (CSS transition, 200ms). Pin icon changes to filled. |

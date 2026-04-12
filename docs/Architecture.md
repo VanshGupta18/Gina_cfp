@@ -176,8 +176,8 @@ User question
 │  · Read-only PostgreSQL role                        │
 │  · Parameterised queries                            │
 │  · Max 100 rows returned                            │
-│  · 0 rows → empty state response                   │
-│  · Runtime error → template fallback               │
+│  · 0 rows → empty state response                    │
+│  · Runtime error → template fallback                │
 └──────────────────────────┬──────────────────────────┘
                            │
                            ▼
@@ -189,7 +189,7 @@ User question
 │    / what changed / what contributed                │
 │                                                     │
 │  Runs: GROUP BY on most relevant category column    │
-│  → surfaces biggest contributor to the change      │
+│  → surfaces biggest contributor to the change       │
 └──────────────────────────┬──────────────────────────┘
                            │
                            ▼

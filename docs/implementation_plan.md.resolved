@@ -1,0 +1,671 @@
+# Talk to Data — Frontend Implementation Plan
+
+> **Source:** [Frontend_Master.md](file:///Users/vanshgupta/gina/Gina_cfp/docs/Frontend_Master.md)  
+> **Stack:** Next.js 14 (App Router) · Tailwind CSS · Recharts · `@supabase/ssr` · TypeScript  
+> **Backend:** Fastify on port 3001 — routes for datasets, conversations, messages already implemented
+
+---
+
+## Phase 1 — Project Scaffold & Foundation
+
+> **Goal:** Get a building Next.js app with types, env config, and API client ready. Nothing visual yet.
+
+### Task 1.1 — Initialize Next.js project
+Create the Next.js 14 app inside `frontend/` using `create-next-app` with TypeScript, Tailwind, App Router, and `src-dir=false`.
+
+```bash
+npx -y create-next-app@14 frontend --typescript --tailwind --app --src-dir=false
+```
+
+**Output:** `frontend/` directory with working `npm run dev`.
+
+---
+
+### Task 1.2 — Install dependencies
+Install all required packages per §10 of Frontend_Master.md.
+
+```bash
+npm install @supabase/supabase-js @supabase/ssr recharts papaparse clsx tailwind-merge
+npm install -D @types/papaparse
+```
+
+> [!IMPORTANT]
+> Use `@supabase/ssr` — NOT the deprecated `@supabase/auth-helpers-nextjs`.
+
+---
+
+### Task 1.3 — Create `.env.local` template
+Create `.env.local` with the three required variables:
+
+```env
+NEXT_PUBLIC_SUPABASE_URL=https://xxx.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=xxx
+NEXT_PUBLIC_API_BASE_URL=http://localhost:3001
+```
+
+---
+
+### Task 1.4 — Create folder structure (empty directories)
+Create all directories from §1 — no component files yet, just folders so future imports resolve:
+
+```
+components/landing/
+components/sidebar/
+components/upload/
+components/chat/
+components/output/
+components/charts/
+components/pinned/
+components/semantic/
+components/shared/
+lib/supabase/
+lib/api/
+lib/pii/
+lib/hooks/
+types/
+app/auth/callback/
+app/app/
+```
+
+---
+
+### Task 1.5 — Create `types/index.ts`
+Copy all TypeScript interfaces from §7 of Frontend_Master.md:
+- `Dataset`, `SemanticState`, `ColumnProfile`
+- `Conversation`, `Message`, `OutputPayload`
+- `ChartData`, `BigNumberData`
+- `PipelineStep`, `QueryPayload`
+
+---
+
+### Task 1.6 — Create API client (`lib/api/client.ts`)
+Typed fetch wrapper that:
+1. Gets the Supabase session (browser-side, `getSession()` is safe here)
+2. Attaches `Authorization: Bearer <jwt>` to every request
+3. Throws on non-2xx responses with parsed error message
+
+This is used for all **non-SSE** requests.
+
+---
+
+### Task 1.7 — Create API module: datasets (`lib/api/datasets.ts`)
+Thin wrappers calling `apiFetch`:
+- `listDatasets()` → `GET /api/datasets`
+- `uploadDataset(file: File)` → `POST /api/datasets/upload` (multipart/form-data — no JSON Content-Type)
+- `getSemanticState(datasetId)` → `GET /api/datasets/:id/semantic`
+- `patchSemanticState(datasetId, corrections)` → `PATCH /api/datasets/:id/semantic`
+
+---
+
+### Task 1.8 — Create API module: conversations (`lib/api/conversations.ts`)
+- `listConversations(datasetId)` → `GET /api/datasets/:id/conversations`
+- `createConversation(datasetId, title?)` → `POST /api/datasets/:id/conversations`
+
+---
+
+### Task 1.9 — Create API module: messages (`lib/api/messages.ts`)
+- `getMessages(conversationId)` → `GET /api/conversations/:id/messages`
+
+Maps snake_case from backend to camelCase types.
+
+---
+
+## Phase 2 — Authentication Layer
+
+> **Goal:** Google OAuth login → JWT → protected `/app` routes. No UI beyond auth modal.
+
+### Task 2.1 — Supabase browser client (`lib/supabase/client.ts`)
+Create using `createBrowserClient` from `@supabase/ssr`:
+
+```typescript
+import { createBrowserClient } from '@supabase/ssr';
+
+export const supabase = createBrowserClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+);
+```
+
+---
+
+### Task 2.2 — Supabase server client (`lib/supabase/server.ts`)
+Create using `createServerClient` from `@supabase/ssr` — used in middleware and the auth callback route handler.
+
+---
+
+### Task 2.3 — OAuth callback handler (`app/auth/callback/route.ts`)
+- Reads `code` from query params
+- Exchanges code for session using Supabase server client
+- Redirects to `/app`
+
+---
+
+### Task 2.4 — Auth middleware (`middleware.ts`)
+- Uses `createServerClient` from `@supabase/ssr`
+- Calls `supabase.auth.getUser()` (NOT `getSession()` — security requirement)
+- Blocks all `/app/*` routes if no valid user
+- Redirects to `/` (landing page)
+- Matcher: `/app/:path*`
+
+> [!WARNING]
+> Must use `getUser()` in server code — `getSession()` reads cookies without JWT validation and can be spoofed.
+
+---
+
+### Task 2.5 — `useAuth` hook (`lib/hooks/useAuth.ts`)
+Provides: `user`, `session`, `signOut()`, `isLoading`
+- Uses `supabase.auth.onAuthStateChange` listener
+- Fires `POST /api/users/sync` on first session (fire-and-forget)
+
+---
+
+### Task 2.6 — Root layout with auth provider (`app/layout.tsx`)
+- Load fonts (Inter from Google Fonts)
+- Global Tailwind setup
+- Wrap children in auth context provider
+- HTML lang, meta viewport, title tag
+
+---
+
+### Task 2.7 — Landing page (`app/page.tsx`) + AuthModal
+Minimal landing — just enough to test auth flow:
+- "Talk to Data" wordmark
+- Tagline + sub-copy
+- "Get started" CTA → opens `AuthModal`
+- `AuthModal` wraps Supabase `Auth` component with Google OAuth
+
+> [!NOTE]
+> Landing page gets polished later in Phase 7. This is a functional stub.
+
+---
+
+## Phase 3 — App Shell & Sidebar
+
+> **Goal:** After login, user sees sidebar with datasets/conversations and a main content area.
+
+### Task 3.1 — App shell layout (`app/app/layout.tsx`)
+- CSS Grid: `260px` sidebar + `1fr` main area
+- Sidebar on the left, main content (children) fills remaining width
+- Full viewport height
+
+---
+
+### Task 3.2 — Dataset context (`lib/hooks/useDatasets.ts`)
+React context providing:
+- `datasets: Dataset[]`
+- `activeDataset: Dataset | null`
+- `setActiveDataset(id)`
+- `refreshDatasets()`
+
+Fetches from `GET /api/datasets` on mount.
+
+---
+
+### Task 3.3 — Conversation context (`lib/hooks/useConversation.ts`)
+React context providing:
+- `conversations: Conversation[]` (for active dataset)
+- `activeConversation: Conversation | null`
+- `setActiveConversation(id)`
+- `messages: Message[]`
+- `addMessage(msg)`
+- `refreshConversations()`
+
+Fetches conversations when active dataset changes. Fetches messages when active conversation changes.
+
+---
+
+### Task 3.4 — `DemoBadge.tsx` component
+Small amber pill rendering "DEMO". Reused in sidebar and chat header.
+
+---
+
+### Task 3.5 — `Sidebar.tsx` — main sidebar component
+- **Header:** User avatar (initials fallback) + email + logout icon
+- **"Upload new dataset" button** — always visible below header
+- **DEMO section:** Datasets where `isDemo === true`, each collapsible
+- **MY DATASETS section:** Datasets where `isDemo === false`, or empty state "No datasets yet"
+- Collapsible dataset sections showing nested conversations
+
+---
+
+### Task 3.6 — `DatasetSection.tsx`
+Single dataset entry in sidebar:
+- Collapsible (expanded if it's the active dataset)
+- Shows conversations listed by title (truncated to 40 chars)
+- `DemoBadge` if `isDemo`
+- "+" New Conversation button at bottom
+
+---
+
+### Task 3.7 — `ConversationItem.tsx`
+Single conversation link in sidebar:
+- Highlighted background when active
+- Click → sets active conversation in context
+
+---
+
+### Task 3.8 — `NewConversationBtn.tsx`
+"+ New conversation" button:
+- Calls `POST /api/datasets/:id/conversations`
+- Adds new conversation to local state
+- Sets it as active
+
+---
+
+### Task 3.9 — App default page (`app/app/page.tsx`)
+- If datasets exist → redirect to first dataset's first conversation
+- If no datasets → show empty state with upload prompt
+
+---
+
+## Phase 4 — Upload Flow & PII Shield
+
+> **Goal:** User can upload a CSV, PII gets redacted client-side, backend processes and returns understanding card.
+
+### Task 4.1 — PII Shield (`lib/pii/shield.ts`)
+The client-side PII detector/redactor. ~100 lines of TypeScript:
+
+1. Parse CSV with PapaParse (in browser)
+2. **Pass 1:** Scan column headers against `HEADER_PATTERNS` (name, email, phone, dob, nino, etc.)
+3. **Pass 2:** Regex scan first 50 data rows per column against `VALUE_REGEXES` (email, UK phone, UK postcode, UUID, sort code, NI number, account number)
+4. Replace matched values with `[REDACTED_EMAIL]`, `[REDACTED_PHONE]`, etc.
+5. Re-serialize as CSV (PapaParse `unparse`)
+6. Return `{ redactedFile: File, redactedColumns: string[], totalRedactions: number }`
+
+> [!IMPORTANT]
+> PII shield MUST run before any network call. The backend never sees raw PII. This is a core trust story for judges.
+
+---
+
+### Task 4.2 — `UploadZone.tsx`
+Drag-and-drop file picker:
+- Dashed border + upload icon
+- "or click to browse" text
+- `.csv` only, max 50MB client-side validation
+- On file selection → triggers PII shield → then upload
+
+---
+
+### Task 4.3 — `PIISummaryBanner.tsx`
+Amber banner shown when PII is detected:
+- "We detected and redacted N sensitive columns (email, donor_id) before processing. Your original file is unchanged."
+- Non-blocking — user sees it and proceeds
+
+---
+
+### Task 4.4 — `UnderstandingCard.tsx`
+Rendered after successful upload:
+- Document/sparkle icon
+- Plain English summary sentence from backend (`understandingCard` field)
+- "Something off?" link (triggers correction modal — wired in Phase 7)
+
+---
+
+### Task 4.5 — Upload modal orchestration
+Wire the full flow together:
+1. User clicks "Upload new dataset" in sidebar → modal opens with `UploadZone`
+2. File selected → PII shield runs → `PIISummaryBanner` shown if redactions found
+3. Redacted CSV POSTed to `POST /api/datasets/upload`
+4. Loading skeleton while waiting
+5. On success → `UnderstandingCard` renders
+6. Dataset added to sidebar → first conversation auto-created → chat input focused → modal closes
+
+---
+
+## Phase 5 — Query Pipeline & Chat UI
+
+> **Goal:** The core product — send a question, watch the pipeline animate, see the answer. This is the critical path.
+
+### Task 5.1 — SSE stream consumer (`lib/api/query.ts`)
+The POST-based SSE consumer using `fetch` + `ReadableStream`:
+- `async function* streamQuery(payload, token)` — async generator
+- Parses SSE format: `event: step\ndata: {...}\n\n`
+- Yields `{ event: string, data: object }` per SSE message
+- Handles buffer correctly (incomplete lines stay in buffer)
+
+> [!WARNING]
+> Cannot use `EventSource` — it only supports GET. The backend's `/api/query` is POST-only.
+
+---
+
+### Task 5.2 — `usePipeline` hook (`lib/hooks/usePipeline.ts`)
+State manager for the query pipeline:
+- `steps: PipelineStep[]` — live-updated as SSE events arrive
+- `result: OutputPayload | null` — set when `result` SSE event arrives
+- `isStreaming: boolean`
+- `error: string | null`
+- `runQuery(payload)` — starts stream, updates state per event
+- Step update logic: match by `step` name, add or update existing
+
+---
+
+### Task 5.3 — `useReasoningToggle` hook (`lib/hooks/useReasoningToggle.ts`)
+- `showReasoning: boolean`
+- `toggleReasoning()`
+- Backed by `sessionStorage` — persists through refreshes but not across sessions
+
+---
+
+### Task 5.4 — `ChatView.tsx` — main chat area
+Layout:
+- Chat header: dataset name + DEMO badge (if demo) + reasoning toggle (top right)
+- Scrollable message list (fills available height)
+- Fixed-bottom chat input bar
+- Pinned panel slot (hidden by default, 360px when active)
+
+---
+
+### Task 5.5 — `ChatInput.tsx`
+- Text input + send button
+- Disabled while `isStreaming === true`
+- On submit:
+  1. Add user message to local conversation state
+  2. Build `sessionContext` (last 3 Q&A exchanges + last result set)
+  3. Call `usePipeline.runQuery()`
+
+---
+
+### Task 5.6 — `MessageList.tsx`
+- Scrollable container for messages
+- Auto-scrolls to bottom on new message
+- Renders `UserMessage` or `AssistantMessage` based on `role`
+
+---
+
+### Task 5.7 — `UserMessage.tsx`
+Simple right-aligned bubble. Text only. Minimal styling.
+
+---
+
+### Task 5.8 — `AssistantMessage.tsx`
+Wrapper that shows:
+- **While streaming:** `ThinkingPill` (or `PipelineTrace` if reasoning is on)
+- **After result:** `OutputCard` (rendered in Phase 6)
+- Small chevron `⌄` to expand/collapse trace per-message (even when global toggle is off)
+
+---
+
+### Task 5.9 — `ThinkingPill.tsx`
+Default compact thinking indicator:
+- Pulsing dot animation + "Thinking..." text
+- Small chevron to expand into full trace
+- Shown when `isStreaming && !showReasoning`
+
+---
+
+### Task 5.10 — `PipelineTrace.tsx`
+Expanded reasoning trace (Gemini-style):
+- Maps `steps[]` array to `PipelineStep` rows
+- Each step shows icon + label + status
+- Renders live as SSE events arrive
+
+---
+
+### Task 5.11 — `PipelineStep.tsx`
+Single step row in the trace:
+
+| Status | Icon | Style |
+|--------|------|-------|
+| `pending` | none | dimmed text |
+| `running` | animated spinner | normal text |
+| `complete` | ✓ green checkmark | green text |
+| `warning` | ⚠ amber | amber text + detail message |
+
+Step labels mapped from §4.8 of Frontend_Master.md (e.g., `planner` running → "Understanding your question...").
+
+---
+
+### Task 5.12 — `ReasoningToggle.tsx`
+"Show reasoning ○ ●" toggle switch in chat header:
+- Reads/writes from `useReasoningToggle` hook
+- When ON, all subsequent traces auto-expand
+
+---
+
+## Phase 6 — Output Card & Charts
+
+> **Goal:** Rich, styled output cards with narrative, charts, citations, confidence, and follow-ups.
+
+### Task 6.1 — `OutputCard.tsx` — main output container
+The complete result display after `result` SSE event. Assembles all sub-components:
+- `KeyFigure` → `NarrativeText` → `ChartPanel` (collapsed) → `CitationChips` → `SQLExpand` → `ConfidenceIndicator` → `FollowUpSuggestions` → `SomethingOff`
+
+---
+
+### Task 6.2 — `KeyFigure.tsx`
+Large prominent headline number/text. Renders `keyFigure` string as-is in large font.
+
+---
+
+### Task 6.3 — `NarrativeText.tsx`
+2–3 sentence plain English explanation. Renders `narrative` string. No markdown parsing needed.
+
+---
+
+### Task 6.4 — `CitationChips.tsx`
+Row of small pills: "based on: amount · category · quarter"
+- Maps `citationChips: string[]` to styled pills
+
+---
+
+### Task 6.5 — `SQLExpand.tsx`
+Accordion: "See how this was calculated"
+- Collapsed by default
+- Expands to show `sql` (and `secondarySql` if present) in `<pre>` monospace block
+
+---
+
+### Task 6.6 — `ConfidenceIndicator.tsx`
+Progress bar with percentage:
+- Green: score > 70
+- Amber: score > 40
+- Red: score ≤ 40
+- Label: "Confidence: 82%"
+
+---
+
+### Task 6.7 — `FollowUpSuggestions.tsx`
+2–3 clickable pill buttons:
+- Maps `followUpSuggestions: string[]`
+- On click: populate chat input text (do NOT auto-submit)
+
+---
+
+### Task 6.8 — `SomethingOff.tsx`
+"Something off? ↗" link at bottom of output card. Click triggers `CorrectionModal` (wired in Phase 7).
+
+---
+
+### Task 6.9 — `ChartPanel.tsx` — chart dispatcher
+- "See chart ▼" toggle — chart is **collapsed by default**
+- When expanded, dispatches to correct chart component based on `chartType`
+- Pin button appears only when chart is expanded
+
+```typescript
+switch (chartType) {
+  case 'big_number': return <BigNumberCard />;
+  case 'bar':        return <BarChart />;
+  case 'line':       return <LineChart />;
+  case 'grouped_bar': return <GroupedBarChart />;
+  case 'stacked_bar': return <StackedBarChart />;
+  case 'table':      return <DataTable />;
+}
+```
+
+---
+
+### Task 6.10 — `BigNumberCard.tsx`
+Pure CSS — no Recharts. Large number + label text. Uses `keyFigure` string.
+
+---
+
+### Task 6.11 — `BarChart.tsx`
+Recharts horizontal bar chart (`layout="vertical"`):
+- Category on Y-axis, value on X-axis
+- `chartData.labels` as categories, `chartData.datasets` as series
+- NatWest palette: deep teal `#006D6F`, navy `#1D2B53`, amber `#F5A623`
+- Tooltips on hover, no axis labels by default
+
+---
+
+### Task 6.12 — `LineChart.tsx`
+Recharts line chart:
+- X-axis = period labels from `labels[]`
+- Same colour palette
+- Tooltips on hover
+
+---
+
+### Task 6.13 — `GroupedBarChart.tsx`
+Recharts grouped bar:
+- Multiple datasets rendered as adjacent bars
+- Side-by-side comparison
+
+---
+
+### Task 6.14 — `StackedBarChart.tsx`
+Recharts stacked bar:
+- `stackId="a"` on all `<Bar>` components
+- Percentage labels on segments
+
+---
+
+### Task 6.15 — `DataTable.tsx`
+Tailwind-styled table fallback:
+- Max 10 rows shown initially
+- "Show more" expand button for remaining rows
+
+---
+
+### Task 6.16 — `PinButton.tsx`
+Pin icon button:
+- Only visible when chart is expanded
+- On click: emits pin event up to `ChatView`
+- Icon changes to filled when pinned
+
+---
+
+### Task 6.17 — `PinnedOutputPanel.tsx`
+Right-side panel:
+- Hidden by default (0 width)
+- Slides in with CSS transition (200ms) when chart is pinned
+- Shows: pinned chart + key figure
+- "Unpin ✕" button at top right
+- Only one pinned chart at a time — new pin replaces old
+
+---
+
+## Phase 7 — Polish, Corrections & Demo Readiness
+
+> **Goal:** Final features, edge cases, and visual polish.
+
+### Task 7.1 — `CorrectionModal.tsx`
+"Something off?" correction flow:
+- Triggered from `SomethingOff` link on output card or understanding card
+- Shows all columns with current `businessLabel` + `semanticType` pre-filled
+- Dropdowns for type: amount, date, category, identifier, flag, text
+- Submit → `PATCH /api/datasets/:id/semantic`
+- On success: update understanding card in place, no reload
+
+---
+
+### Task 7.2 — `SnapshotBadge.tsx`
+Amber "SNAPSHOT MODE" badge:
+- Shown in chat header when snapshot mode is active
+- Fades in/out on toggle
+
+---
+
+### Task 7.3 — Snapshot mode keyboard shortcut
+- `Ctrl+Shift+D` → calls `POST /api/snapshot/toggle`
+- Shows toast notification: "Snapshot mode enabled/disabled"
+- When snapshot responses arrive, animate pipeline trace with 200ms delay per step for realism
+
+---
+
+### Task 7.4 — `LoadingSkeleton.tsx`
+Generic skeleton loader component:
+- Used during dataset loading, upload processing, and initial conversation load
+- Rectangular pulsing placeholder blocks
+
+---
+
+### Task 7.5 — Empty states
+- **No datasets:** "No datasets yet" in MY DATASETS sidebar section
+- **No conversations:** Centered message "Ask a question about [dataset name]" with 2–3 sample question pills
+- **0 rows returned:** Output card shows "No records matched — try broadening your question" + follow-up suggestions
+
+---
+
+### Task 7.6 — Error handling
+- Network error: show error message + retry button on output card
+- SSE stream error: show graceful error state, re-enable chat input
+- Long narratives: truncate with "read more" expand
+
+---
+
+### Task 7.7 — Landing page polish
+Elevate the Phase 2 stub to final quality:
+- Full-screen hero with NatWest-appropriate styling
+- Smooth animations, gradients, typography (Inter font)
+- Clean dark/light design
+- No nav bar, no footer
+
+---
+
+### Task 7.8 — Responsive tweaks
+- Sidebar collapse on small screens (optional, low priority)
+- Chat input stays fixed at bottom on all viewports
+- Output cards wrap gracefully on narrow screens
+
+---
+
+## Verification Plan
+
+### After Phase 2
+- [ ] Google OAuth → JWT → redirect to `/app` works
+- [ ] Unauthenticated access to `/app` redirects to `/`
+
+### After Phase 3
+- [ ] Sidebar renders with demo datasets from `GET /api/datasets`
+- [ ] Clicking dataset expands conversations
+- [ ] New conversation creates via API and appears in sidebar
+
+### After Phase 4
+- [ ] Upload CSV → PII shield runs → redacted file sent to backend
+- [ ] Understanding card renders from backend response
+- [ ] PII banner shows correct redaction count
+
+### After Phase 5
+- [ ] Send question → SSE events stream → pipeline trace animates
+- [ ] Chat input disabled during streaming, re-enabled on result
+
+### After Phase 6
+- [ ] Full output card renders: key figure, narrative, chart, citations, SQL, confidence, follow-ups
+- [ ] All 6 chart types render correctly
+- [ ] Pin/unpin chart works
+
+### After Phase 7
+- [ ] Correction modal submits and updates understanding card
+- [ ] Snapshot mode toggles with `Ctrl+Shift+D`
+- [ ] Empty states and error states display correctly
+
+---
+
+## Task Dependency Summary
+
+```mermaid
+graph TD
+    P1[Phase 1: Scaffold] --> P2[Phase 2: Auth]
+    P1 --> P3[Phase 3: Shell & Sidebar]
+    P2 --> P3
+    P1 --> P4[Phase 4: Upload & PII]
+    P3 --> P4
+    P3 --> P5[Phase 5: Chat & Pipeline]
+    P5 --> P6[Phase 6: Output & Charts]
+    P4 --> P7[Phase 7: Polish]
+    P6 --> P7
+```
+
+> [!NOTE]
+> **Phase 3** depends on Phase 2 (auth context needed for sidebar user info). **Phase 5** can start as soon as Phase 3 is done (sidebar provides dataset/conversation context). **Phase 4** and **Phase 5** can be worked on in parallel by two people.
