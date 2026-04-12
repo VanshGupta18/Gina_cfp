@@ -1,4 +1,5 @@
 import { env } from './config/env.js';
+import { buildCorsAllowedOrigins } from './config/corsOrigins.js';
 import Fastify from 'fastify';
 import type { FastifyPluginAsync } from 'fastify';
 import cors from '@fastify/cors';
@@ -14,6 +15,7 @@ import messagesRoutes from './routes/messages.js';
 import queryRoutes from './routes/query.js';
 import snapshotRoutes from './routes/snapshot.js';
 import { loadDemoSnapshots } from './snapshots/snapshotStore.js';
+import { MAX_CSV_UPLOAD_BYTES } from './routes/datasets.js';
 
 const ssePlugin = fastifySse as unknown as FastifyPluginAsync;
 
@@ -22,9 +24,21 @@ async function main() {
 
   await loadDemoSnapshots(app.log);
 
-  // Core plugins
-  await app.register(cors, { origin: true });
-  await app.register(multipart);
+  const corsAllowed = buildCorsAllowedOrigins(env.CORS_ORIGINS);
+
+  await app.register(cors, {
+    origin: (origin, cb) => {
+      if (!origin) return cb(null, true);
+      if (corsAllowed.has(origin)) return cb(null, true);
+      return cb(null, false);
+    },
+    credentials: true,
+  });
+  await app.register(multipart, {
+    limits: {
+      fileSize: MAX_CSV_UPLOAD_BYTES,
+    },
+  });
   await app.register(ssePlugin);
   await app.register(dbPlugin);
   await app.register(s3Plugin);

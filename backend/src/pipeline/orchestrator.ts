@@ -168,7 +168,11 @@ function buildCitationChips(rows: ResultRow[], relevantColumns: string[]): strin
   return [...fromRelevant, ...extra].slice(0, 5);
 }
 
-function buildFollowUpSuggestions(columns: ColumnProfile[], intent: PlannerIntent | undefined): string[] {
+/** Exported for Phase 7 — empty SQL results still ship 2–3 follow-ups when schema supports them. */
+export function buildFollowUpSuggestions(
+  columns: ColumnProfile[],
+  intent: PlannerIntent | undefined,
+): string[] {
   const suggestions: string[] = [];
   const hasDate = columns.some((c) => c.semanticType === 'date');
   const hasCategory = columns.some((c) => c.semanticType === 'category');

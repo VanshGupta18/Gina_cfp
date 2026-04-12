@@ -1,7 +1,7 @@
 import { randomUUID } from 'crypto';
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
-import { parseCSV } from '../utils/csvParser.js';
+import { bufferToCsvText, parseCSV } from '../utils/csvParser.js';
 import { uploadToS3 } from '../utils/s3.js';
 import { profileColumns, coerceValue } from '../semantic/profiler.js';
 import type { ColumnProfile } from '../semantic/profiler.js';
@@ -13,8 +13,8 @@ import {
 } from '../semantic/embedder.js';
 import { mergeAllProfilerColumns, profilerToEnricherInput } from '../semantic/mergeProfile.js';
 
-/** Maximum accepted CSV file size: 50 MB */
-const MAX_FILE_SIZE = 50 * 1024 * 1024;
+/** Maximum accepted CSV file size: 50 MB (Phase 7 boundary test). */
+export const MAX_CSV_UPLOAD_BYTES = 50 * 1024 * 1024;
 
 const semanticPatchBodySchema = z.object({
   corrections: z
@@ -134,9 +134,9 @@ export default async function datasetsRoutes(fastify: FastifyInstance) {
     async (request, reply) => {
       const { datasetId } = request.params;
 
-      // Verify dataset belongs to this user before returning semantic data
+      // Owned dataset or shared demo (same rule as GET /datasets list)
       const ownerCheck = await fastify.db.query(
-        'SELECT id FROM datasets WHERE id = $1 AND user_id = $2',
+        'SELECT id FROM datasets WHERE id = $1 AND (user_id = $2 OR is_demo = true)',
         [datasetId, request.userId],
       );
       if (ownerCheck.rowCount === 0) {
@@ -313,39 +313,94 @@ export default async function datasetsRoutes(fastify: FastifyInstance) {
   // ── POST /api/datasets/upload ──────────────────────────────────────────────
   // multipart → parse → profile → enrich + embed → S3 → dynamic table → datasets + semantic + embeddings
   fastify.post('/datasets/upload', async (request, reply) => {
-    // 1. Read the multipart file
-    const data = await request.file();
-    if (!data) {
-      return reply.status(400).send({ error: 'No file uploaded' });
+    type FilePart = {
+      file: AsyncIterable<Buffer | Uint8Array>;
+      filename?: string;
+      mimetype?: string;
+    };
+
+    async function readPartToBuffer(part: FilePart): Promise<Buffer> {
+      const chunks: Buffer[] = [];
+      let totalBytes = 0;
+      for await (const chunk of part.file) {
+        totalBytes += chunk.length;
+        if (totalBytes > MAX_CSV_UPLOAD_BYTES) {
+          throw new Error('FILE_TOO_LARGE');
+        }
+        chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+      }
+      return Buffer.from(Buffer.concat(chunks));
     }
 
-    const filename = data.filename ?? 'upload.csv';
+    // 1. Prefer iterating file parts: some clients send an empty first part; skip until non-empty buffer.
+    let fileBuffer: Buffer | undefined;
+    let filename = 'upload.csv';
+    let mimetype = 'text/csv';
+
+    const multipartReq = request as typeof request & {
+      files?: () => AsyncIterable<FilePart>;
+      file: () => Promise<FilePart | undefined>;
+    };
+
+    if (typeof multipartReq.files === 'function') {
+      for await (const part of multipartReq.files()) {
+        const buf = await readPartToBuffer(part).catch((e) => {
+          if (e instanceof Error && e.message === 'FILE_TOO_LARGE') return null;
+          throw e;
+        });
+        if (buf === null) {
+          return reply.status(413).send({ error: 'File exceeds the 50 MB limit' });
+        }
+        if (buf.length === 0) continue;
+        fileBuffer = buf;
+        filename = part.filename ?? 'upload.csv';
+        mimetype = part.mimetype ?? 'text/csv';
+        break;
+      }
+    }
+
+    if (fileBuffer === undefined || fileBuffer.length === 0) {
+      const data = await multipartReq.file();
+      if (!data) {
+        return reply.status(400).send({ error: 'No file uploaded' });
+      }
+      try {
+        fileBuffer = await readPartToBuffer(data);
+      } catch (e) {
+        if (e instanceof Error && e.message === 'FILE_TOO_LARGE') {
+          return reply.status(413).send({ error: 'File exceeds the 50 MB limit' });
+        }
+        throw e;
+      }
+      filename = data.filename ?? 'upload.csv';
+      mimetype = data.mimetype ?? 'text/csv';
+    }
+
+    if (fileBuffer === undefined || fileBuffer.length === 0) {
+      return reply.status(400).send({
+        error: 'CSV has no headers',
+        hint:
+          'The uploaded file body was empty. Use multipart field name "file", ensure the CSV is not 0 bytes, and on OneDrive/Google Drive use "Available offline" / download a real file before uploading.',
+      });
+    }
 
     // Reject non-CSV by extension and MIME type
     const isCSVExtension = filename.toLowerCase().endsWith('.csv');
-    const isCSVMime = CSV_MIMETYPES.has(data.mimetype.toLowerCase());
+    const isCSVMime = CSV_MIMETYPES.has(mimetype.toLowerCase());
     if (!isCSVExtension && !isCSVMime) {
       return reply.status(400).send({ error: 'Only CSV files are accepted' });
     }
 
-    // 2. Read the full file into a buffer, enforcing the 50 MB limit
-    const chunks: Buffer[] = [];
-    let totalBytes = 0;
-    for await (const chunk of data.file) {
-      totalBytes += chunk.length;
-      if (totalBytes > MAX_FILE_SIZE) {
-        return reply.status(413).send({ error: 'File exceeds the 50 MB limit' });
-      }
-      chunks.push(chunk as Buffer);
-    }
-    const fileBuffer = Buffer.concat(chunks);
-
-    // 3. Parse CSV
-    const csvText = fileBuffer.toString('utf8');
+    // 2. Parse CSV (UTF-8 / UTF-16 / BOM)
+    const csvText = bufferToCsvText(fileBuffer);
     const parsed = parseCSV(csvText);
 
     if (parsed.headers.length === 0) {
-      return reply.status(400).send({ error: 'CSV has no headers' });
+      return reply.status(400).send({
+        error: 'CSV has no headers',
+        hint:
+          'The first row must be comma-separated column names. If you exported from Excel, choose "CSV UTF-8 (Comma delimited)" or ensure the file is not UTF-16 misread.',
+      });
     }
     if (parsed.rows.length === 0) {
       return reply.status(400).send({ error: 'CSV has no data rows' });

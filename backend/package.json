@@ -8,7 +8,10 @@
     "dev": "tsx watch src/server.ts",
     "build": "tsc",
     "start": "node dist/server.js",
-    "migrate": "node scripts/migrate.mjs"
+    "migrate": "node scripts/migrate.mjs",
+    "test": "node --import dotenv/config --import tsx --test src/tests/corsOrigins.test.ts src/tests/validateSql.security.test.ts src/tests/queue.serial.test.ts src/tests/sqlTemplates.fallback.test.ts src/tests/followUpSuggestions.test.ts src/tests/uploadLimits.test.ts src/tests/responseCache.concurrent.test.ts",
+    "test:phase7:e2e": "node scripts/phase7-e2e.mjs",
+    "test:e2e:upload": "node scripts/e2e-full-upload.mjs"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3",

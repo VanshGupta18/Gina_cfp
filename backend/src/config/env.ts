@@ -43,6 +43,9 @@ const envSchema = z.object({
 
   PORT: z.coerce.number().int().positive().default(3001),
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
+
+  /** Comma-separated extra CORS origins (e.g. https://app.vercel.app). Localhost defaults are always allowed in server.ts. */
+  CORS_ORIGINS: z.string().optional().default(''),
 });
 
 const parsed = envSchema.safeParse(process.env);
