@@ -10,7 +10,7 @@ const plannerOutputSchema = z.object({
   relevantTables: z.array(z.string()),
   answerFromCache: z.boolean(),
   cacheAnswer: z.unknown().nullable(),
-  conversationalReply: z.string().optional(),
+  conversationalReply: z.string().nullable().optional(),
 });
 
 export type PlannerIntent = z.infer<typeof plannerOutputSchema>['intent'];

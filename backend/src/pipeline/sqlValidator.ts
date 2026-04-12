@@ -1,5 +1,6 @@
-import { Parser } from 'node-sql-parser';
+import nodeSqlParser from 'node-sql-parser';
 
+const { Parser } = nodeSqlParser;
 const parser = new Parser();
 
 export type SqlValidationResult =

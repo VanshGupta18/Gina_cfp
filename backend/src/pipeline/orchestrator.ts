@@ -21,6 +21,7 @@ import { executeReadOnlySql, type ResultRow } from './dbExecutor.js';
 import { runSecondaryQuery } from './secondaryQuery.js';
 import { detectAutoInsights, computeConfidence, selectChartType, type ChartType } from './autoInsight.js';
 import { generateNarration } from './narrator.js';
+import { logPipelineRun, type PipelineRunInput } from '../telemetry/pipelineLogger.js';
 
 export type { QueryResultPayload };
 
@@ -261,6 +262,59 @@ async function persistResponseCache(
  */
 export async function runQueryOrchestration(input: QueryOrchestrationInput): Promise<void> {
   const { fastify, reply, userId, datasetId, question, sessionContext } = input;
+  const t0 = Date.now();
+
+  // ── Telemetry accumulator ──
+  const tel: Partial<PipelineRunInput> & { conversationId: string } = {
+    conversationId: input.conversationId,
+    messageId: null,
+    intent: null,
+    latencyPlannerMs: null,
+    latencySqlMs: null,
+    latencyDbMs: null,
+    latencyNarratorMs: null,
+    sqlPath: null,
+    sqlValid: null,
+    rowsReturned: null,
+    cacheHit: 'none',
+    fallbackTriggered: false,
+    fallbackStep: null,
+    fallbackTarget: null,
+    secondaryQueryFired: false,
+    secondaryDimension: null,
+    confidenceScore: null,
+    snapshotUsed: false,
+  };
+
+  async function flushTelemetry(overrides: Partial<PipelineRunInput> = {}): Promise<void> {
+    const run: PipelineRunInput = {
+      conversationId: tel.conversationId,
+      messageId: tel.messageId ?? null,
+      intent: tel.intent ?? null,
+      latencyTotalMs: Date.now() - t0,
+      latencyPlannerMs: tel.latencyPlannerMs ?? null,
+      latencySqlMs: tel.latencySqlMs ?? null,
+      latencyDbMs: tel.latencyDbMs ?? null,
+      latencyNarratorMs: tel.latencyNarratorMs ?? null,
+      sqlPath: tel.sqlPath ?? null,
+      sqlValid: tel.sqlValid ?? null,
+      rowsReturned: tel.rowsReturned ?? null,
+      cacheHit: tel.cacheHit ?? 'none',
+      fallbackTriggered: tel.fallbackTriggered ?? false,
+      fallbackStep: tel.fallbackStep ?? null,
+      fallbackTarget: tel.fallbackTarget ?? null,
+      secondaryQueryFired: tel.secondaryQueryFired ?? false,
+      secondaryDimension: tel.secondaryDimension ?? null,
+      confidenceScore: tel.confidenceScore ?? null,
+      snapshotUsed: tel.snapshotUsed ?? false,
+      ...overrides,
+    };
+    try {
+      await logPipelineRun(fastify.db, run);
+    } catch (e) {
+      fastify.log.error({ err: e }, 'logPipelineRun failed (non-fatal)');
+    }
+  }
 
   const load = await fastify.db.query<{
     data_table_name: string;
@@ -296,8 +350,9 @@ export async function runQueryOrchestration(input: QueryOrchestrationInput): Pro
     };
     await sendResult(reply, out);
     reply.sse.close();
+    let persistedMsgId: string | null = null;
     try {
-      await persistMessages(fastify, {
+      persistedMsgId = await persistMessages(fastify, {
         conversationId: input.conversationId,
         question,
         narrative: out.narrative,
@@ -307,6 +362,14 @@ export async function runQueryOrchestration(input: QueryOrchestrationInput): Pro
     } catch (e) {
       fastify.log.error({ err: e }, 'persistMessages response_cache hit');
     }
+    await flushTelemetry({
+      messageId: persistedMsgId ?? out.messageId,
+      intent: out.chartType === 'table' ? 'conversational' : 'simple_query',
+      cacheHit: 'response_cache',
+      rowsReturned: out.rowCount,
+      confidenceScore: out.confidenceScore,
+      snapshotUsed: false,
+    });
     return;
   }
 
@@ -335,6 +398,7 @@ export async function runQueryOrchestration(input: QueryOrchestrationInput): Pro
       detail: 'Understanding your question…',
     });
 
+    const tPlannerStart = Date.now();
     const plan = await runPlanner({
       question,
       columns: plannerColumns,
@@ -342,6 +406,8 @@ export async function runQueryOrchestration(input: QueryOrchestrationInput): Pro
       sessionExchanges: sessionContext.recentExchanges.slice(-3),
       lastResultSetSummary: summarizeLastResultSet(sessionContext.lastResultSet),
     });
+    tel.latencyPlannerMs = Date.now() - tPlannerStart;
+    tel.intent = plan.intent;
 
     await sendStep(reply, {
       step: 'planner',
@@ -391,6 +457,12 @@ export async function runQueryOrchestration(input: QueryOrchestrationInput): Pro
       } catch (e) {
         fastify.log.error({ err: e }, 'persistResponseCache conversational');
       }
+      await flushTelemetry({
+        messageId: conversationalPayload.messageId,
+        rowsReturned: 0,
+        confidenceScore: 100,
+        cacheHit: 'none',
+      });
       return;
     }
 
@@ -437,6 +509,12 @@ export async function runQueryOrchestration(input: QueryOrchestrationInput): Pro
       } catch (e) {
         fastify.log.error({ err: e }, 'persistResponseCache follow_up_cache');
       }
+      await flushTelemetry({
+        messageId: followUpPayload.messageId,
+        rowsReturned: 0,
+        confidenceScore: 90,
+        cacheHit: 'none',
+      });
       return;
     }
 
@@ -447,14 +525,20 @@ export async function runQueryOrchestration(input: QueryOrchestrationInput): Pro
       sqlPath: 'ec2',
     });
 
+    const tSqlStart = Date.now();
     const gen = await generateSql({
       question,
       tableName,
       columns,
       metricDefinitions: '',
     });
+    tel.latencySqlMs = Date.now() - tSqlStart;
+    tel.sqlPath = gen.path;
 
     if (gen.path !== 'ec2') {
+      tel.fallbackTriggered = true;
+      tel.fallbackStep = 'sql_generation';
+      tel.fallbackTarget = gen.path;
       await sendStep(reply, {
         step: 'sql_fallback',
         status: 'warning',
@@ -473,9 +557,11 @@ export async function runQueryOrchestration(input: QueryOrchestrationInput): Pro
     });
 
     const validation = validateSql(gen.sql, [tableName]);
+    tel.sqlValid = validation.valid;
     if (!validation.valid) {
       await sendError(reply, validation.reason, false);
       reply.sse.close();
+      await flushTelemetry();
       return;
     }
 
@@ -486,8 +572,11 @@ export async function runQueryOrchestration(input: QueryOrchestrationInput): Pro
     });
 
     // ── Person A: execute via readonly_agent role ──
+    const tDbStart = Date.now();
     const exec = await executeReadOnlySql(fastify.db, gen.sql);
+    tel.latencyDbMs = Date.now() - tDbStart;
     const rows = exec.rows;
+    tel.rowsReturned = rows.length;
 
     await sendStep(reply, {
       step: 'db_execution',
@@ -507,6 +596,8 @@ export async function runQueryOrchestration(input: QueryOrchestrationInput): Pro
     });
 
     if (secondaryResult.fired) {
+      tel.secondaryQueryFired = true;
+      tel.secondaryDimension = null; // dimension not exposed by secondaryQuery.ts yet
       await sendStep(reply, {
         step: 'secondary_query',
         status: 'running',
@@ -517,6 +608,7 @@ export async function runQueryOrchestration(input: QueryOrchestrationInput): Pro
     // ── Person A: auto insights + confidence (§6.7 / §6.8) ──
     const autoInsights = detectAutoInsights(rows, columns);
     const confidenceScore = computeConfidence(rows, gen.path, columns);
+    tel.confidenceScore = confidenceScore;
 
     // ── Person A: chart type (§9) ──
     const chartType = selectChartType(rows, plan.intent, question);
@@ -527,11 +619,14 @@ export async function runQueryOrchestration(input: QueryOrchestrationInput): Pro
     // ── Person A: narration (§6.6) + §5 narration_cache before narrator when possible ──
     await sendStep(reply, { step: 'narration', status: 'running', detail: 'Writing your answer' });
     let narrative: string;
+    let narrationCacheHit = false;
 
+    const tNarrStart = Date.now();
     if (!secondaryResult.fired) {
       const cachedNarr = await getNarrationCache(fastify.db, narrCacheKey);
       if (cachedNarr != null) {
         narrative = cachedNarr;
+        narrationCacheHit = true;
       } else if (rows.length === 0) {
         narrative =
           'No rows matched your question. Try broadening your filters or rephrasing the question.';
@@ -557,6 +652,10 @@ export async function runQueryOrchestration(input: QueryOrchestrationInput): Pro
         secondaryRows: secondaryResult.rows,
         autoInsights,
       });
+    }
+    tel.latencyNarratorMs = Date.now() - tNarrStart;
+    if (narrationCacheHit) {
+      tel.cacheHit = 'narration_cache';
     }
     await sendStep(reply, { step: 'narration', status: 'complete', detail: 'Done' });
 
@@ -604,6 +703,7 @@ export async function runQueryOrchestration(input: QueryOrchestrationInput): Pro
     } catch (cacheErr) {
       fastify.log.error({ err: cacheErr }, 'persistResponseCache sql path');
     }
+    await flushTelemetry({ messageId });
   } catch (e) {
     fastify.log.error({ err: e }, 'runQueryOrchestration');
     await sendError(
@@ -612,5 +712,6 @@ export async function runQueryOrchestration(input: QueryOrchestrationInput): Pro
       false,
     );
     reply.sse.close();
+    await flushTelemetry();
   }
 }
