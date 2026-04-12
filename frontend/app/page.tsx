@@ -28,27 +28,35 @@ export default function LandingPage() {
 
       {/* Header */}
       <header className="w-full border-b border-white/5 py-4 px-8 flex items-center justify-between z-20 sticky top-0 bg-surface/80 backdrop-blur-md">
-        <div className="flex items-center gap-8 border-white/10">
+        <div className="flex items-center gap-4">
           <Link href="/" className="text-xl font-bold tracking-tight text-white">
             G.I.N.A
           </Link>
-          <nav className="hidden md:flex items-center gap-6 text-sm font-medium tracking-wide text-slate-300">
-            <Link href="#how-it-works" className="hover:text-white transition-colors border-b border-white/30 pb-0.5">HOW IT WORKS</Link>
-            <Link href="#features" className="hover:text-white transition-colors">FEATURES</Link>
-          </nav>
-        </div>
-        <div className="flex items-center gap-6">
-          <button 
-            onClick={() => setShowAuth(true)}
-            className="text-sm font-semibold tracking-wide text-slate-300 hover:text-white transition-colors uppercase"
+
+          {/* Live Demo Badge Link */}
+          <Link
+            href="/live-demo"
+            className="group flex items-center gap-2 rounded-full border border-brand-indigo/30 bg-brand-indigo/10 px-3 py-1 hover:border-brand-indigo/60 hover:bg-brand-indigo/20 transition-all duration-300 shadow-[0_0_10px_rgba(90,78,227,0.1)] hover:shadow-[0_0_16px_rgba(90,78,227,0.25)]"
           >
-            LOG IN
-          </button>
+            <span className="relative flex h-2 w-2">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-brand-indigo-light opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-brand-indigo-light"></span>
+            </span>
+            <span className="text-[10px] font-black tracking-[0.15em] text-brand-indigo-light uppercase group-hover:text-white transition-colors">Live Demo</span>
+          </Link>
+        </div>
+        <div className="flex items-center gap-10">
+          <Link
+            href="/what-gina-provides"
+            className="text-sm font-medium tracking-wide text-slate-300 hover:text-white transition-colors"
+          >
+            Why G.I.N.A
+          </Link>
           <button
             onClick={() => setShowAuth(true)}
-            className="text-sm font-semibold tracking-wide text-white border border-white/20 rounded-lg px-5 py-2.5 hover:bg-white/5 transition-colors"
+            className="text-sm font-semibold tracking-wide text-slate-200 border border-white/20 rounded-lg px-5 py-2 hover:bg-white/5 hover:border-white/40 transition-colors uppercase"
           >
-            Get started
+            LOG IN
           </button>
         </div>
       </header>
@@ -94,12 +102,15 @@ export default function LandingPage() {
             >
               Get started for free
             </button>
-            <button className="bg-surface-secondary border border-surface-border text-white px-8 py-3.5 rounded-lg text-base font-semibold hover:bg-surface-tertiary transition-colors flex items-center justify-center gap-2 w-full sm:w-auto">
+            <Link
+              href="/how-it-works"
+              className="bg-surface-secondary border border-surface-border text-white px-8 py-3.5 rounded-lg text-base font-semibold hover:bg-surface-tertiary transition-colors flex items-center justify-center gap-2 w-full sm:w-auto"
+            >
               <div className="bg-brand-indigo/20 text-brand-indigo-light p-1 rounded-full">
                 <Play className="w-4 h-4 fill-current" />
               </div>
               See how it works
-            </button>
+            </Link>
           </div>
 
           <p className="text-sm text-slate-400">
@@ -109,44 +120,21 @@ export default function LandingPage() {
       </main>
 
       {/* Footer */}
-      <footer className="border-t border-surface-border bg-[#0A0D14] py-16 px-8 md:px-16">
-        <div className="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-4 gap-12">
-          {/* Logo & Description */}
-          <div className="md:col-span-1">
-            <h3 className="text-xl font-bold tracking-tight text-white mb-4">G.I.N.A</h3>
-            <p className="text-sm text-slate-400 leading-relaxed pr-4">
-              The intelligence layer for your structured data.
-            </p>
+      <footer className="border-t border-surface-border bg-[#0A0D14] py-8 px-8">
+        <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-6">
+          {/* Logo + tagline */}
+          <div className="flex flex-col items-center md:items-start gap-1">
+            <span className="text-lg font-bold tracking-tight text-white">G.I.N.A</span>
+            <span className="text-xs text-slate-500">The intelligence layer for your structured data.</span>
           </div>
 
-          {/* Product Links */}
-          <div>
-            <h4 className="text-xs font-bold tracking-widest text-slate-100 uppercase mb-4">PRODUCT</h4>
-            <ul className="space-y-3 text-sm text-slate-400">
-              <li><Link href="#" className="hover:text-white transition-colors">Documentation</Link></li>
-              <li><Link href="#" className="hover:text-white transition-colors">Features</Link></li>
-            </ul>
+          {/* Real links */}
+          <div className="flex items-center gap-8 text-sm text-slate-400">
+            <Link href="/how-it-works" className="hover:text-white transition-colors">How it works</Link>
           </div>
 
-          {/* Company Links */}
-          <div>
-            <h4 className="text-xs font-bold tracking-widest text-slate-100 uppercase mb-4">COMPANY</h4>
-            <ul className="space-y-3 text-sm text-slate-400">
-              <li><Link href="#" className="hover:text-white transition-colors">Contact</Link></li>
-              <li><Link href="#" className="hover:text-white transition-colors">Privacy Policy</Link></li>
-            </ul>
-          </div>
-
-          {/* Legal Links */}
-          <div>
-            <h4 className="text-xs font-bold tracking-widest text-slate-100 uppercase mb-4">LEGAL</h4>
-            <ul className="space-y-3 text-sm text-slate-400 mb-6">
-              <li><Link href="#" className="hover:text-white transition-colors">Terms of Service</Link></li>
-            </ul>
-            <p className="text-xs text-slate-500">
-              © 2024 G.I.N.A Intelligence. All rights reserved.
-            </p>
-          </div>
+          {/* Copyright */}
+          <p className="text-xs text-slate-500">© 2026 G.I.N.A Intelligence.</p>
         </div>
       </footer>
 
