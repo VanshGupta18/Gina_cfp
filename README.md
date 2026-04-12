@@ -94,17 +94,3 @@ Backend: planner → SQL generation (templates / Groq / HF) → validation → r
 | [`docs/Frontend_Master.md`](docs/Frontend_Master.md) | UI structure, routes, contracts |
 | [`docs/Backend_Implementation_Plan.md`](docs/Backend_Implementation_Plan.md) | Backend delivery notes |
 | [`docs/Backend_Audit.md`](docs/Backend_Audit.md) / [`docs/Frontend_Audit.md`](docs/Frontend_Audit.md) | Audits |
-
----
-
-## Submitting this project
-
-1. Push the repo to GitHub (do **not** commit `.env`, `.env.local`, or secrets).
-2. Confirm `.gitignore` excludes env files and build output (`node_modules`, `backend/dist`, `frontend/.next`).
-3. Use your public repo URL for submission, for example: `https://github.com/<your-username>/<repository-name>`.
-
----
-
-## License / attribution
-
-Project context: **NatWest Code for Purpose 2026** (see `backend/package.json` description). Add a `LICENSE` file if your submission requires one.
