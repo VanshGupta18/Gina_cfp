@@ -22,22 +22,38 @@ export function OutputCard({ payload, onCorrectionClick }: OutputCardProps) {
   if (!payload) return null;
 
   return (
-    <div className="rounded-xl bg-surface border border-surface-border p-6 shadow-sm">
+    <div className="flex flex-col gap-6">
       
-      <KeyFigure text={payload.keyFigure} />
-      
-      <NarrativeText text={payload.narrative} />
-      
-      {/* Chart Panel dispatcher (collapsed by default) */}
-      {payload.chartType && payload.chartType !== 'table' && (
-        <ChartPanel 
-          chartType={payload.chartType} 
-          chartData={payload.chartData} 
-        />
-      )}
+      {/* Top section: The analytic insight box */}
+      <div className="rounded-xl bg-surface/50 border border-surface-border p-6 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.05)]">
+        
+        <div className="flex items-start justify-between mb-4">
+          <KeyFigure text={payload.keyFigure} />
+          <ConfidenceIndicator score={payload.confidenceScore} />
+        </div>
+        
+        <div className="prose prose-invert prose-slate max-w-none text-slate-300">
+          <NarrativeText text={payload.narrative} />
+        </div>
+        
+        {/* Chart Panel dispatcher (collapsed by default) */}
+        {payload.chartType && payload.chartType !== 'table' && (
+          <div className="mt-6 border-t border-surface-border pt-6">
+            <ChartPanel 
+              chartType={payload.chartType} 
+              chartData={payload.chartData} 
+            />
+          </div>
+        )}
 
-      {/* Citations that the AI used */}
-      <CitationChips citations={payload.citationChips} />
+        {/* Citations that the AI used */}
+        {payload.citationChips && payload.citationChips.length > 0 && (
+          <div className="mt-6 border-t border-surface-border pt-4">
+            <CitationChips citations={payload.citationChips} />
+          </div>
+        )}
+
+      </div>
 
       {/* SQL Details */}
       {(payload.sql || payload.secondarySql) && (
@@ -48,14 +64,11 @@ export function OutputCard({ payload, onCorrectionClick }: OutputCardProps) {
         />
       )}
 
-      {/* Confidence */}
-      <ConfidenceIndicator score={payload.confidenceScore} />
-
-      {/* Follow ups */}
-      <FollowUpSuggestions suggestions={payload.followUpSuggestions} />
-
-      {/* Edge case correction */}
-      <SomethingOff onCorrectionClick={onCorrectionClick} />
+      {/* Bottom section controls */}
+      <div className="flex flex-col gap-4">
+        <FollowUpSuggestions suggestions={payload.followUpSuggestions} />
+        <SomethingOff onCorrectionClick={onCorrectionClick} />
+      </div>
 
     </div>
   );

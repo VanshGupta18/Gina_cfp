@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import type { ChartType, ChartData, StandardChartData, BigNumberChartData } from '@/types';
+import { ChevronDown, BarChart2 } from 'lucide-react';
 
 // Importing chart components
 import { BigNumberCard } from '../charts/BigNumberCard';
@@ -42,19 +43,18 @@ export function ChartPanel({
   };
 
   return (
-    <div className="mb-4">
+    <div className="w-full">
       <button 
         onClick={() => setExpanded(!expanded)}
-        className="flex items-center gap-2 mb-2 text-sm font-medium text-brand-teal hover:text-brand-teal-light transition-colors"
+        className="flex items-center gap-2 text-sm font-medium text-brand-cyan hover:text-white transition-colors"
       >
-        <span>See chart</span>
-        <svg className={`w-4 h-4 transition-transform ${expanded ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-        </svg>
+        <BarChart2 className="w-4 h-4" />
+        <span>View Visualization</span>
+        <ChevronDown className={`w-4 h-4 transition-transform ${expanded ? 'rotate-180' : ''}`} />
       </button>
 
       {expanded && (
-        <div className="relative pt-2">
+        <div className="relative mt-4 bg-surface rounded-lg p-4 border border-surface-border">
           {renderChart()}
           <PinButton 
             isPinned={isPinned} 

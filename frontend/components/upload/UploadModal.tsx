@@ -7,6 +7,7 @@ import { useDatasets } from '@/lib/hooks/useDatasets';
 import PIISummaryBanner from './PIISummaryBanner';
 import UnderstandingCard from './UnderstandingCard';
 import { CorrectionModal } from './CorrectionModal';
+import { UploadCloud, ShieldAlert, CheckCircle2, ChevronRight, X, Sparkles } from 'lucide-react';
 
 interface UploadModalProps {
   onClose: () => void;
@@ -19,14 +20,25 @@ export default function UploadModal({ onClose }: UploadModalProps) {
   const [isProcessing, setIsProcessing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   
-  // States to transition from upload -> pii summary -> understanding card
+  // Custom states for steps (01 Intake, 02 Risk, 03 Mapping)
+  const [step, setStep] = useState<1 | 2 | 3>(1);
   const [redactedColumns, setRedactedColumns] = useState<string[]>([]);
   const [understandingCard, setUnderstandingCard] = useState<string | null>(null);
-  const [uploadComplete, setUploadComplete] = useState(false);
   const [uploadedDatasetId, setUploadedDatasetId] = useState<string | null>(null);
   const [correctionModalOpen, setCorrectionModalOpen] = useState(false);
+  const [fileDetails, setFileDetails] = useState<{name: string, size: string} | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Formatting utility for MB
+  const formatBytes = (bytes: number, decimals = 2) => {
+      if (!+bytes) return '0 Bytes';
+      const k = 1024;
+      const dm = decimals < 0 ? 0 : decimals;
+      const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB', 'PB', 'EB', 'ZB', 'YB'];
+      const i = Math.floor(Math.log(bytes) / Math.log(k));
+      return `${parseFloat((bytes / Math.pow(k, i)).toFixed(dm))} ${sizes[i]}`;
+  }
 
   const handleProcessFile = useCallback(
     async (file: File) => {
@@ -39,6 +51,7 @@ export default function UploadModal({ onClose }: UploadModalProps) {
         return;
       }
 
+      setFileDetails({ name: file.name, size: formatBytes(file.size) });
       setIsProcessing(true);
       setError(null);
       setRedactedColumns([]);
@@ -46,18 +59,26 @@ export default function UploadModal({ onClose }: UploadModalProps) {
       setCorrectionModalOpen(false);
 
       try {
+        // Step 1 done -> Move to Step 2 (Risk Mitigation view implicitly inside processing)
         const { redactedFile, redactedColumns: cols } = await runPIIShield(file);
         setRedactedColumns(cols);
+        
+        // Show step 2 for at least a beat
+        setStep(2);
 
+        // Upload and get understanding
         const result = await uploadDataset(redactedFile);
 
         setUnderstandingCard(result.understandingCard);
         setUploadedDatasetId(result.dataset.id);
-        setUploadComplete(true);
+        
+        // Step 3 (Intelligence Mapping)
+        setStep(3);
         await refreshDatasets();
       } catch (err: unknown) {
         const message = err instanceof Error ? err.message : 'Failed to process and upload dataset';
         setError(message);
+        setStep(1);
       } finally {
         setIsProcessing(false);
       }
@@ -97,43 +118,51 @@ export default function UploadModal({ onClose }: UploadModalProps) {
 
   return (
     <>
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-      <div className="relative w-full max-w-2xl bg-surface-secondary border border-surface-border rounded-2xl shadow-2xl flex flex-col max-h-[90vh]">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#0F121A]/80 backdrop-blur-md p-4">
+      <div className="relative w-full max-w-[540px] bg-[#141822] border border-surface-border rounded-xl shadow-2xl flex flex-col pt-8 pb-10 px-10">
         
+        {/* State Steps Subheader */}
+        <div className="text-xs font-bold tracking-widest text-slate-500 uppercase mb-8">
+          {step === 1 && 'STATE 01: INITIAL INTAKE'}
+          {step === 2 && 'STATE 02: RISK MITIGATION'}
+          {step === 3 && 'STATE 03: INTELLIGENCE MAPPING'}
+        </div>
+
         {/* Header */}
-        <div className="flex items-center justify-between p-6 border-b border-surface-border">
-          <h2 className="text-xl font-semibold text-slate-100">Upload Dataset</h2>
-          {(!isProcessing || uploadComplete) && (
+        <div className="flex items-center justify-between mb-6">
+          <h2 className="text-2xl font-bold text-white">
+            {step === 1 && 'Upload a dataset'}
+            {step === 2 && 'Verify protection layers'}
+            {step === 3 && <span className="flex items-center gap-3"><span className="w-5 h-5 rounded-full border-2 border-brand-indigo border-t-transparent animate-spin"/> Analysing your data...</span>}
+          </h2>
+          {step === 1 && (
             <button
               onClick={onClose}
               className="text-slate-400 hover:text-slate-200 transition-colors"
             >
-              <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-              </svg>
+              <X className="w-5 h-5" />
             </button>
           )}
         </div>
 
-        {/* Body */}
-        <div className="p-6 overflow-y-auto">
-          {error && (
-            <div className="mb-6 rounded-lg bg-red-500/10 border border-red-500/20 px-4 py-3 text-sm text-red-400">
-              {error}
-            </div>
-          )}
+        {error && (
+          <div className="mb-6 rounded-lg bg-red-500/10 border border-red-500/20 px-4 py-3 text-sm text-red-400">
+            {error}
+          </div>
+        )}
 
-          {!uploadComplete && !isProcessing && (
-            // Upload Zone
+        {/* STEP 1: INITIAL INTAKE */}
+        {step === 1 && (
+          <div className="flex flex-col gap-6">
             <div
               onDragOver={onDragOver}
               onDragLeave={onDragLeave}
               onDrop={onDrop}
               onClick={() => fileInputRef.current?.click()}
-              className={`border-2 border-dashed rounded-xl p-12 flex flex-col items-center justify-center text-center cursor-pointer transition-colors ${
+              className={`border border-dashed rounded-xl p-10 flex flex-col items-center justify-center text-center cursor-pointer transition-colors ${
                 isDragging 
-                  ? 'border-brand-teal bg-brand-teal/5' 
-                  : 'border-surface-border hover:border-brand-teal/50 hover:bg-surface-tertiary'
+                  ? 'border-brand-indigo bg-brand-indigo/5' 
+                  : 'border-slate-600 hover:border-slate-400 hover:bg-white/[0.02]'
               }`}
             >
               <input
@@ -143,79 +172,114 @@ export default function UploadModal({ onClose }: UploadModalProps) {
                 ref={fileInputRef}
                 onChange={onFileChange}
               />
-              <div className="w-16 h-16 rounded-full bg-surface-tertiary flex items-center justify-center mb-4">
-                <svg className="w-8 h-8 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
-                </svg>
+              
+              <div className="mb-4 text-brand-indigo">
+                <UploadCloud className="w-10 h-10" strokeWidth={1.5} />
               </div>
-              <h3 className="text-lg font-medium text-slate-200 mb-2">
-                Click to browse or drag and drop
+              
+              <h3 className="text-lg font-medium text-slate-200 mb-1">
+                Drop your CSV file here
               </h3>
-              <p className="text-sm text-slate-500 mb-6">
-                CSV files only. Maximum size 50MB.
+              <div className="text-base text-slate-400 mb-4 inline-flex items-center gap-1">
+                or <span className="text-brand-indigo-light hover:underline font-medium">click to browse</span>
+              </div>
+              
+              <p className="text-xs text-slate-500">
+                .csv only · max 50MB
+              </p>
+            </div>
+
+            <div className="bg-surface-secondary border border-surface-border rounded-xl p-4 flex items-start gap-4">
+              <div className="mt-0.5 text-emerald-400">
+                <ShieldAlert className="w-5 h-5" strokeWidth={2} />
+              </div>
+              <p className="text-sm text-slate-300 leading-relaxed">
+                PII automatically detected and redacted. Your data remains private and encrypted under G.I.N.A core security protocols.
+              </p>
+            </div>
+
+            <div className="flex justify-between items-center mt-2">
+              <button onClick={onClose} className="text-sm font-medium text-slate-400 hover:text-white transition">Cancel</button>
+              <button disabled className="px-6 py-2.5 bg-surface-tertiary text-slate-400 rounded-lg text-sm font-medium cursor-not-allowed">Upload</button>
+            </div>
+          </div>
+        )}
+
+        {/* STEP 2: RISK MITIGATION */}
+        {step === 2 && (
+          <div className="flex flex-col gap-6 animate-in fade-in duration-500">
+            <PIISummaryBanner redactedColumns={redactedColumns} />
+
+            <div className="border border-emerald-500/30 border-dashed rounded-xl p-6 bg-emerald-500/[0.02] flex items-center justify-between">
+              <div className="flex items-center gap-4">
+                <div className="w-12 h-12 rounded-lg bg-emerald-500/10 flex items-center justify-center text-emerald-400 font-bold text-xs font-mono uppercase border border-emerald-500/20">
+                  CSV
+                </div>
+                <div className="flex flex-col gap-1">
+                  <span className="text-base font-bold text-white">{fileDetails?.name || 'dataset.csv'}</span>
+                  <span className="text-sm text-slate-400">{fileDetails?.size || 'Unknown size'} · Ready for processing</span>
+                  
+                  {redactedColumns.length > 0 && (
+                    <div className="flex flex-wrap gap-2 mt-2">
+                      {redactedColumns.map(col => (
+                        <span key={col} className="px-2 py-0.5 rounded flex items-center text-xs font-mono bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                          {col}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+              <CheckCircle2 className="w-6 h-6 text-emerald-400" />
+            </div>
+
+            <p className="text-xs text-slate-500 italic">
+              *The identified columns contain pattern-matched sensitive information and have been masked for the session.*
+            </p>
+
+            <div className="flex justify-between items-center mt-2">
+              <button onClick={() => setStep(1)} className="text-sm font-medium text-slate-400 hover:text-white transition">Cancel</button>
+              <button disabled className="px-6 py-2.5 bg-brand-indigo text-white rounded-lg text-sm font-semibold flex items-center gap-2 opacity-70">
+                Processing <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"/>
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* STEP 3: INTELLIGENCE MAPPING */}
+        {step === 3 && understandingCard && (
+          <div className="flex flex-col gap-6 animate-in fade-in duration-500">
+            <div className="bg-surface-secondary border-l-2 border-brand-indigo rounded-r-xl p-6 shadow-lg">
+              <div className="flex items-center gap-2 text-xs font-bold tracking-widest text-brand-indigo-light mb-4 uppercase">
+                <Sparkles className="w-3.5 h-3.5" /> G.I.N.A INTELLIGENCE
+              </div>
+              <h3 className="text-lg font-bold text-white mb-2">G.I.N.A understands your dataset</h3>
+              <p className="text-sm text-slate-300 leading-relaxed mb-5">
+                {understandingCard}
               </p>
               
-              <div className="flex items-center gap-2 text-xs font-medium text-brand-teal px-3 py-1.5 rounded-full bg-brand-teal/10">
-                <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-                </svg>
-                PII Shield Active
+              <div className="w-full flex items-center justify-between text-xs font-medium border-t border-surface-border pt-4">
+                <span className="flex items-center gap-2 text-brand-cyan">
+                  <span className="w-2 h-2 rounded-full bg-brand-cyan animate-pulse"></span>
+                  Processing rows
+                </span>
+                <span className="text-slate-400 text-mono">100% complete</span>
               </div>
             </div>
-          )}
 
-          {isProcessing && (
-            // Processing State
-            <div className="py-12 flex flex-col items-center justify-center text-center">
-              <div className="w-16 h-16 relative mb-6">
-                <div className="absolute inset-0 rounded-full border-4 border-surface-tertiary"></div>
-                <div className="absolute inset-0 rounded-full border-4 border-brand-teal border-t-transparent animate-spin"></div>
-              </div>
-              
-              {redactedColumns.length > 0 ? (
-                <>
-                  <h3 className="text-lg font-medium text-slate-200 mb-2">
-                    Securing your data...
-                  </h3>
-                  <div className="max-w-md w-full text-left mt-6">
-                    <PIISummaryBanner redactedColumns={redactedColumns} />
-                  </div>
-                </>
-              ) : (
-                <>
-                  <h3 className="text-lg font-medium text-slate-200 mb-2">
-                    Analyzing dataset...
-                  </h3>
-                  <p className="text-sm text-slate-400">
-                    Running semantic profiling and generating understanding card.
-                  </p>
-                </>
-              )}
+            <div className="flex justify-between items-center mt-2 border-t border-surface-border pt-6">
+              <button onClick={onClose} className="text-sm font-medium text-slate-400 hover:text-white transition">Upload another</button>
+              <button 
+                onClick={onClose} 
+                className="px-6 py-2.5 hover:bg-brand-indigo-light bg-brand-indigo text-white rounded-lg text-sm font-semibold flex items-center justify-center gap-2 transition-colors group"
+              >
+                Start asking questions
+                <ChevronRight className="w-4 h-4 group-hover:translate-x-0.5 transition-transform" />
+              </button>
             </div>
-          )}
+          </div>
+        )}
 
-          {uploadComplete && understandingCard && (
-            // Success State
-            <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
-              <PIISummaryBanner redactedColumns={redactedColumns} />
-              <UnderstandingCard
-                text={understandingCard}
-                onCorrectionClick={
-                  uploadedDatasetId ? () => setCorrectionModalOpen(true) : undefined
-                }
-              />
-              
-              <div className="mt-8 flex justify-end">
-                <button
-                  onClick={onClose}
-                  className="px-6 py-2.5 bg-brand-teal text-white rounded-xl shadow-lg shadow-brand-teal/20 text-sm font-medium hover:bg-brand-teal-light transition-all"
-                >
-                  Start chatting
-                </button>
-              </div>
-            </div>
-          )}
-        </div>
       </div>
     </div>
 

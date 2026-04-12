@@ -1,103 +1,157 @@
 'use client';
 
 import { useState } from 'react';
+import Link from 'next/link';
 import AuthModal from '@/components/landing/AuthModal';
+import { Play } from 'lucide-react';
 
 export default function LandingPage() {
   const [showAuth, setShowAuth] = useState(false);
 
   return (
-    <main className="relative min-h-screen flex flex-col items-center justify-center overflow-hidden bg-surface">
-      {/* Animated gradient background */}
-      <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute -top-40 -left-40 w-[600px] h-[600px] rounded-full bg-brand-teal/10 blur-[120px] animate-pulse" />
-        <div className="absolute -bottom-40 -right-40 w-[500px] h-[500px] rounded-full bg-brand-navy-light/20 blur-[100px] animate-pulse [animation-delay:2s]" />
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[400px] rounded-full bg-brand-teal/5 blur-[80px]" />
+    <div className="min-h-screen bg-surface flex flex-col font-sans selection:bg-brand-indigo/30 text-slate-200">
+      {/* Top Marquee */}
+      <div className="w-full bg-brand-indigo text-xs font-semibold tracking-widest uppercase py-2.5 overflow-hidden whitespace-nowrap border-b border-brand-indigo-light/20 flex flex-row items-center text-white/90">
+        <div className="animate-marquee inline-flex gap-8 px-4">
+          <span>GET INSTANT INSIGHTS →</span>
+          <span>POWERED BY REAL SQL EXECUTION →</span>
+          <span>PII AUTOMATICALLY REDACTED BEFORE UPLOAD →</span>
+          <span>ASK YOUR DATA ANYTHING IN PLAIN ENGLISH →</span>
+          <span>NO SQL →</span>
+          <span>GET INSTANT INSIGHTS →</span>
+          <span>POWERED BY REAL SQL EXECUTION →</span>
+          <span>PII AUTOMATICALLY REDACTED BEFORE UPLOAD →</span>
+          <span>ASK YOUR DATA ANYTHING IN PLAIN ENGLISH →</span>
+          <span>NO SQL →</span>
+        </div>
       </div>
 
-      {/* Grid pattern overlay */}
-      <div
-        className="absolute inset-0 opacity-[0.03]"
-        style={{
-          backgroundImage:
-            'linear-gradient(rgba(255,255,255,0.1) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.1) 1px, transparent 1px)',
-          backgroundSize: '40px 40px',
-        }}
-      />
-
-      {/* Content */}
-      <div className="relative z-10 flex flex-col items-center text-center px-6 max-w-3xl">
-        {/* Badge */}
-        <div className="inline-flex items-center gap-2 rounded-full border border-brand-teal/30 bg-brand-teal/10 px-4 py-1.5 mb-8">
-          <span className="w-2 h-2 rounded-full bg-brand-teal animate-pulse" />
-          <span className="text-xs font-medium text-brand-teal tracking-wide uppercase">
-            NatWest Code for Purpose 2026
-          </span>
+      {/* Header */}
+      <header className="w-full border-b border-white/5 py-4 px-8 flex items-center justify-between z-20 sticky top-0 bg-surface/80 backdrop-blur-md">
+        <div className="flex items-center gap-8 border-white/10">
+          <Link href="/" className="text-xl font-bold tracking-tight text-white">
+            G.I.N.A
+          </Link>
+          <nav className="hidden md:flex items-center gap-6 text-sm font-medium tracking-wide text-slate-300">
+            <Link href="#how-it-works" className="hover:text-white transition-colors border-b border-white/30 pb-0.5">HOW IT WORKS</Link>
+            <Link href="#features" className="hover:text-white transition-colors">FEATURES</Link>
+          </nav>
         </div>
-
-        {/* Wordmark */}
-        <h1 className="text-5xl sm:text-6xl lg:text-7xl font-bold tracking-tight text-slate-100 mb-4">
-          Talk to{' '}
-          <span className="text-transparent bg-clip-text bg-gradient-to-r from-brand-teal to-brand-teal-light">
-            Data
-          </span>
-        </h1>
-
-        {/* Tagline */}
-        <p className="text-xl sm:text-2xl font-medium text-slate-300 mb-4">
-          Ask your data anything.{' '}
-          <span className="text-slate-100">Get plain English answers instantly.</span>
-        </p>
-
-        {/* Sub-copy */}
-        <p className="text-base sm:text-lg text-slate-400 mb-10 max-w-xl leading-relaxed">
-          Upload a CSV. Ask a question. No SQL, no dashboards, no guesswork.
-          <br />
-          Powered by AI that shows its work.
-        </p>
-
-        {/* Feature pills */}
-        <div className="flex flex-wrap justify-center gap-2 mb-10">
-          {[
-            '🔒 Privacy-first PII shield',
-            '⚡ Real-time SQL execution',
-            '📊 Auto-generated charts',
-            '🔍 Explainable reasoning',
-          ].map((feature) => (
-            <span
-              key={feature}
-              className="rounded-full border border-surface-border bg-surface-secondary px-3 py-1 text-sm text-slate-300"
-            >
-              {feature}
-            </span>
-          ))}
-        </div>
-
-        {/* CTA */}
-        <button
-          id="get-started-btn"
-          onClick={() => setShowAuth(true)}
-          className="group relative inline-flex items-center gap-2 rounded-xl bg-brand-teal px-8 py-4 text-base font-semibold text-white shadow-lg shadow-brand-teal/20 transition-all duration-200 hover:bg-brand-teal-light hover:shadow-brand-teal/30 hover:scale-105 active:scale-100"
-        >
-          Get started
-          <svg
-            className="w-4 h-4 transition-transform duration-200 group-hover:translate-x-0.5"
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
+        <div className="flex items-center gap-6">
+          <button 
+            onClick={() => setShowAuth(true)}
+            className="text-sm font-semibold tracking-wide text-slate-300 hover:text-white transition-colors uppercase"
           >
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
-          </svg>
-        </button>
+            LOG IN
+          </button>
+          <button
+            onClick={() => setShowAuth(true)}
+            className="text-sm font-semibold tracking-wide text-white border border-white/20 rounded-lg px-5 py-2.5 hover:bg-white/5 transition-colors"
+          >
+            Get started
+          </button>
+        </div>
+      </header>
 
-        {/* Sub-CTA */}
-        <p className="mt-4 text-sm text-slate-500">
-          Free to use · Secured with Google OAuth · No data stored as-is
-        </p>
-      </div>
+      {/* Main Hero */}
+      <main className="relative flex-1 flex flex-col items-center justify-center overflow-hidden px-4 pt-20 pb-32">
+        {/* Dot pattern background */}
+        <div
+          className="absolute inset-0 pointer-events-none opacity-[0.15]"
+          style={{
+            backgroundImage: 'radial-gradient(circle at 2px 2px, white 1px, transparent 1px)',
+            backgroundSize: '32px 32px',
+          }}
+        />
+
+        <div className="relative z-10 flex flex-col items-center text-center max-w-4xl mx-auto mt-10">
+          {/* Badge */}
+          <div className="inline-flex items-center justify-center rounded-full bg-brand-indigo px-4 py-1.5 mb-8 text-xs font-bold tracking-widest text-white uppercase shadow-[0_0_15px_rgba(90,78,227,0.5)]">
+            G.I.N.A
+          </div>
+
+          {/* Heading */}
+          <h1 className="flex flex-col items-center gap-2 mb-6">
+            <span className="font-serif text-5xl md:text-6xl lg:text-7xl italic text-slate-200 font-light">
+              Grounded Insight from
+            </span>
+            <span className="text-6xl md:text-7xl lg:text-[5.5rem] font-bold tracking-tight text-white leading-none">
+              Natural Language<br />Analytics
+            </span>
+          </h1>
+
+          {/* Subheading */}
+          <p className="text-lg md:text-xl text-slate-300 max-w-2xl mx-auto leading-relaxed mb-10 font-medium">
+            Ask your data anything. Upload a CSV — get plain English answers instantly.<br />
+            No SQL, no dashboards, no guesswork.
+          </p>
+
+          {/* CTAs */}
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-8">
+            <button
+              onClick={() => setShowAuth(true)}
+              className="bg-white text-slate-900 px-8 py-3.5 rounded-lg text-base font-semibold hover:bg-slate-100 transition-colors w-full sm:w-auto"
+            >
+              Get started for free
+            </button>
+            <button className="bg-surface-secondary border border-surface-border text-white px-8 py-3.5 rounded-lg text-base font-semibold hover:bg-surface-tertiary transition-colors flex items-center justify-center gap-2 w-full sm:w-auto">
+              <div className="bg-brand-indigo/20 text-brand-indigo-light p-1 rounded-full">
+                <Play className="w-4 h-4 fill-current" />
+              </div>
+              See how it works
+            </button>
+          </div>
+
+          <p className="text-sm text-slate-400">
+            Sign in with Google · No credit card required
+          </p>
+        </div>
+      </main>
+
+      {/* Footer */}
+      <footer className="border-t border-surface-border bg-[#0A0D14] py-16 px-8 md:px-16">
+        <div className="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-4 gap-12">
+          {/* Logo & Description */}
+          <div className="md:col-span-1">
+            <h3 className="text-xl font-bold tracking-tight text-white mb-4">G.I.N.A</h3>
+            <p className="text-sm text-slate-400 leading-relaxed pr-4">
+              The intelligence layer for your structured data.
+            </p>
+          </div>
+
+          {/* Product Links */}
+          <div>
+            <h4 className="text-xs font-bold tracking-widest text-slate-100 uppercase mb-4">PRODUCT</h4>
+            <ul className="space-y-3 text-sm text-slate-400">
+              <li><Link href="#" className="hover:text-white transition-colors">Documentation</Link></li>
+              <li><Link href="#" className="hover:text-white transition-colors">Features</Link></li>
+            </ul>
+          </div>
+
+          {/* Company Links */}
+          <div>
+            <h4 className="text-xs font-bold tracking-widest text-slate-100 uppercase mb-4">COMPANY</h4>
+            <ul className="space-y-3 text-sm text-slate-400">
+              <li><Link href="#" className="hover:text-white transition-colors">Contact</Link></li>
+              <li><Link href="#" className="hover:text-white transition-colors">Privacy Policy</Link></li>
+            </ul>
+          </div>
+
+          {/* Legal Links */}
+          <div>
+            <h4 className="text-xs font-bold tracking-widest text-slate-100 uppercase mb-4">LEGAL</h4>
+            <ul className="space-y-3 text-sm text-slate-400 mb-6">
+              <li><Link href="#" className="hover:text-white transition-colors">Terms of Service</Link></li>
+            </ul>
+            <p className="text-xs text-slate-500">
+              © 2024 G.I.N.A Intelligence. All rights reserved.
+            </p>
+          </div>
+        </div>
+      </footer>
 
       {/* Auth Modal */}
       {showAuth && <AuthModal onClose={() => setShowAuth(false)} />}
-    </main>
+    </div>
   );
 }
