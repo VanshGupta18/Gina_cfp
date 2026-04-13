@@ -2,8 +2,10 @@
 
 import { useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
-import { Sparkles, X } from 'lucide-react';
+import { Sparkles } from 'lucide-react';
 import Link from 'next/link';
+import { Modal } from '@/components/ui/Modal';
+import { Button } from '@/components/ui/Button';
 
 interface AuthModalProps {
   onClose: () => void;
@@ -30,21 +32,12 @@ export default function AuthModal({ onClose }: AuthModalProps) {
   };
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-[#0F121A]/80 backdrop-blur-md"
-      onClick={onClose}
+    <Modal
+      isOpen={true}
+      onClose={onClose}
+      className="max-w-md p-10 flex flex-col items-center text-center bg-surface-secondary shadow-2xl"
     >
-      <div
-        className="relative w-full max-w-md mx-4 rounded-3xl border border-surface-border bg-surface-secondary p-10 shadow-2xl flex flex-col items-center text-center"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <button
-          onClick={onClose}
-          className="absolute top-6 right-6 text-slate-400 hover:text-slate-200 transition-colors"
-          aria-label="Close"
-        >
-          <X className="w-5 h-5" />
-        </button>
+      <div className="flex flex-col w-full h-full">
 
         <div className="mb-6 flex flex-col items-center">
           <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-brand-indigo mb-6 shadow-[0_0_20px_rgba(90,78,227,0.4)]">
@@ -60,11 +53,11 @@ export default function AuthModal({ onClose }: AuthModalProps) {
           </div>
         )}
 
-        <div className="w-full flex flex-col gap-3">
-          <button
+        <div className="w-full flex-col flex gap-3">
+          <Button
             onClick={handleGoogleSignIn}
             disabled={isLoading}
-            className="flex w-full items-center justify-center gap-3 rounded-xl bg-white px-4 py-3.5 text-base font-semibold text-slate-900 transition-all hover:bg-slate-100 disabled:opacity-60 disabled:cursor-not-allowed"
+            className="flex w-full items-center justify-center gap-3 rounded-xl bg-white text-slate-900 hover:bg-slate-100 disabled:opacity-60 h-[52px]"
           >
             {isLoading ? (
               <svg className="w-5 h-5 animate-spin text-slate-400" fill="none" viewBox="0 0 24 24">
@@ -80,17 +73,17 @@ export default function AuthModal({ onClose }: AuthModalProps) {
               </svg>
             )}
             {isLoading ? 'Wait...' : 'Continue with Google'}
-          </button>
+          </Button>
 
           <Link href="/app" className="flex w-full items-center justify-center gap-3 rounded-xl border border-surface-border bg-surface-tertiary px-4 py-3.5 text-base font-medium text-slate-200 transition-all hover:bg-surface-border hover:text-white">
             Explore with demo data
           </Link>
         </div>
 
-        <p className="mt-8 text-center text-xs text-slate-500 leading-relaxed max-w-[280px]">
+        <p className="mt-8 text-center text-xs text-slate-500 leading-relaxed max-w-[280px] self-center">
           By signing in, you agree to our Terms of Service. G.I.N.A automatically redacts PII before processing queries to ensure data privacy and security.
         </p>
       </div>
-    </div>
+    </Modal>
   );
 }

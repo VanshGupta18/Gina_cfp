@@ -27,23 +27,49 @@ export function SQLExpand({ sql, secondarySql, rowsReturned }: SQLExpandProps) {
   };
 
   return (
-    <div className="mb-4 border border-surface-border rounded-lg bg-surface flex flex-col overflow-hidden">
-      <button 
+    <div
+      className="mb-4 flex flex-col overflow-hidden rounded-xl transition-all duration-200"
+      style={{
+        background: 'rgba(12,15,22,0.6)',
+        border: expanded
+          ? '1px solid rgba(60,224,214,0.20)'
+          : '1px solid rgba(255,255,255,0.07)',
+        boxShadow: expanded ? '-3px 0 0 0 rgba(60,224,214,0.4)' : 'none',
+      }}
+    >
+      <button
         onClick={() => setExpanded(!expanded)}
-        className="flex items-center justify-between w-full px-4 py-2 hover:bg-surface-secondary transition-colors"
+        className="flex items-center justify-between w-full px-4 py-3 transition-colors duration-150 hover:bg-white/3"
       >
-        <div className="flex items-center gap-2">
-          <svg className={`w-4 h-4 text-brand-teal transition-transform ${expanded ? 'rotate-90' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <div className="flex items-center gap-2.5">
+          <svg
+            className={`w-3.5 h-3.5 transition-transform duration-200 ${expanded ? 'rotate-90' : ''}`}
+            style={{ color: expanded ? 'rgb(60,224,214)' : 'rgba(100,116,139,0.7)' }}
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+          >
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
           </svg>
-          <span className="text-xs font-medium text-slate-300">See how this was calculated</span>
+          <span
+            className="text-xs font-medium transition-colors duration-150"
+            style={{ color: expanded ? 'rgb(148,163,184)' : 'rgba(100,116,139,0.8)' }}
+          >
+            See how this was calculated
+          </span>
         </div>
-        
-        {/* Performance metrics shown on the tight header */}
+
         {rowsReturned !== undefined && (
-          <div className="flex items-center gap-3 text-[10px] text-slate-500 font-medium font-mono">
-            <span>{rowsReturned} rows</span>
-          </div>
+          <span
+            className="text-[10px] font-mono font-medium px-2 py-0.5 rounded-full"
+            style={{
+              background: 'rgba(60,224,214,0.08)',
+              border: '1px solid rgba(60,224,214,0.18)',
+              color: 'rgba(60,224,214,0.8)',
+            }}
+          >
+            {rowsReturned} rows
+          </span>
         )}
       </button>
 

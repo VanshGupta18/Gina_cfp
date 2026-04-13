@@ -44,13 +44,14 @@ export function ConversationProvider({ children }: { children: React.ReactNode }
       const fetchedConversations = await listConversations(activeDataset.id);
       setConversations(fetchedConversations);
       
-      // Keep active conversation in sync or set first as active if none exists
+      // Keep active conversation only if it still exists for this dataset (no auto-pick of first)
       if (fetchedConversations.length > 0) {
         setActiveConversationState((current) => {
-          if (!current || !fetchedConversations.find(c => c.id === current.id)) {
-            return fetchedConversations[0];
+          if (current) {
+            const match = fetchedConversations.find((c) => c.id === current.id);
+            if (match) return match;
           }
-          return fetchedConversations.find(c => c.id === current.id) || current;
+          return null;
         });
       } else {
         setActiveConversationState(null);

@@ -3,7 +3,11 @@ import { useConversation } from '@/lib/hooks/useConversation';
 import { Plus } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 
-export default function NewConversationBtn() {
+interface NewConversationBtnProps {
+  onAfterCreate?: () => void;
+}
+
+export default function NewConversationBtn({ onAfterCreate }: NewConversationBtnProps) {
   const { createNewConversation } = useConversation();
   const [isCreating, setIsCreating] = useState(false);
   const router = useRouter();
@@ -13,6 +17,7 @@ export default function NewConversationBtn() {
     const newConv = await createNewConversation();
     if (newConv) {
       router.push(`/app/${newConv.id}`);
+      onAfterCreate?.();
     }
     setIsCreating(false);
   };

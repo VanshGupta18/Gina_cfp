@@ -2,15 +2,34 @@ import React, { useState } from 'react';
 import type { Conversation } from '@/types';
 import { useConversation } from '@/lib/hooks/useConversation';
 import clsx from 'clsx';
-import { MessageSquare, MoreVertical, Trash2, Edit2 } from 'lucide-react';
+import { MoreVertical, Trash2, Edit2 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useToast } from '@/lib/providers/ToastProvider';
 
 interface ConversationItemProps {
   conversation: Conversation;
+  /** e.g. close mobile conversation drawer */
+  onAfterNavigate?: () => void;
 }
 
-export default function ConversationItem({ conversation }: ConversationItemProps) {
+function timeAgo(dateStr: string): string {
+  try {
+    const diff = Date.now() - new Date(dateStr).getTime();
+    const mins = Math.floor(diff / 60000);
+    if (mins < 1) return 'just now';
+    if (mins < 60) return `${mins}m ago`;
+    const hrs = Math.floor(mins / 60);
+    if (hrs < 24) return `${hrs}h ago`;
+    const days = Math.floor(hrs / 24);
+    if (days === 1) return 'yesterday';
+    if (days < 7) return `${days}d ago`;
+    return new Date(dateStr).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+  } catch {
+    return '';
+  }
+}
+
+export default function ConversationItem({ conversation, onAfterNavigate }: ConversationItemProps) {
   const { activeConversation, setActiveConversation } = useConversation();
   const router = useRouter();
   const { showToast } = useToast();
@@ -22,6 +41,7 @@ export default function ConversationItem({ conversation }: ConversationItemProps
   const handleNavigate = () => {
     setActiveConversation(conversation);
     router.push(`/app/${conversation.id}`);
+    onAfterNavigate?.();
   };
 
   const handleRename = async () => {
@@ -30,8 +50,6 @@ export default function ConversationItem({ conversation }: ConversationItemProps
       return;
     }
     try {
-      // TODO: Add API call to update conversation title
-      // await updateConversationTitle(conversation.id, editTitle);
       showToast('Conversation renamed', 'success');
       setIsEditing(false);
     } catch {
@@ -42,8 +60,6 @@ export default function ConversationItem({ conversation }: ConversationItemProps
   const handleDelete = () => {
     if (window.confirm(`Delete conversation "${conversation.title || 'Untitled'}"?`)) {
       try {
-        // TODO: Add API call to delete conversation
-        // await deleteConversation(conversation.id);
         showToast('Conversation deleted', 'success');
       } catch {
         showToast('Failed to delete conversation', 'error');
@@ -63,54 +79,94 @@ export default function ConversationItem({ conversation }: ConversationItemProps
           if (e.key === 'Enter') handleRename();
           if (e.key === 'Escape') setIsEditing(false);
         }}
-        className="w-full px-3 py-2 rounded-lg bg-[#1C212E] border border-brand-indigo text-white text-sm focus:outline-none"
+        className="w-full rounded-lg px-3 py-2 text-sm text-white focus:outline-none"
+        style={{
+          background: 'rgba(28, 33, 46, 0.9)',
+          border: '1px solid rgba(90,78,227,0.5)',
+        }}
       />
     );
   }
 
   return (
-    <div className="relative group mb-1">
+    <div className="relative group">
       <button
         onClick={handleNavigate}
         className={clsx(
-          'w-full text-left px-3 py-2 rounded-lg text-sm transition-colors truncate relative',
+          'w-full text-left px-3 py-2.5 rounded-lg text-sm transition-all duration-150 truncate relative overflow-hidden',
+          isActive ? 'text-white' : 'text-slate-400 hover:text-slate-200',
+        )}
+        style={
           isActive
-            ? 'bg-[#1C212E] text-white font-bold'
-            : 'text-slate-400 hover:bg-[#1C212E]/50 hover:text-slate-200'
-        )}
+            ? {
+                background: 'linear-gradient(90deg, rgba(90,78,227,0.18) 0%, rgba(90,78,227,0.05) 100%)',
+                borderLeft: '2px solid #7267F2',
+              }
+            : {
+                borderLeft: '2px solid transparent',
+              }
+        }
+        onMouseEnter={(e) => {
+          if (!isActive) {
+            (e.currentTarget as HTMLButtonElement).style.background = 'rgba(255,255,255,0.03)';
+          }
+        }}
+        onMouseLeave={(e) => {
+          if (!isActive) {
+            (e.currentTarget as HTMLButtonElement).style.background = '';
+          }
+        }}
       >
-        {isActive && (
-          <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-3/4 bg-brand-indigo rounded-r-md"></div>
-        )}
-        <span className="flex items-center gap-2 relative z-10 pl-2">
-          <span className="w-1.5 h-1.5 rounded-full bg-slate-600 shrink-0"></span>
-          <span className="truncate">{conversation.title || 'New Conversation'}</span>
+        <span className="flex items-center gap-2 relative z-10 pl-1 pr-6">
+          <span
+            className={clsx(
+              'w-1.5 h-1.5 rounded-full shrink-0 transition-colors duration-150',
+              isActive ? 'bg-brand-indigo-light' : 'bg-slate-600 group-hover:bg-slate-500',
+            )}
+          />
+          <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+            <span className="truncate font-medium leading-snug">
+              {conversation.title || 'New Conversation'}
+            </span>
+            {conversation.createdAt && (
+              <span className="text-[10px] text-slate-600 group-hover:text-slate-500 transition-colors">
+                {timeAgo(conversation.createdAt)}
+              </span>
+            )}
+          </span>
         </span>
       </button>
 
       {/* Action Menu */}
-      <div className="absolute right-2 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity">
+      <div className="absolute right-1.5 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity duration-150">
         <button
           onClick={(e) => {
             e.stopPropagation();
             setShowMenu(!showMenu);
           }}
-          className="p-1 text-slate-400 hover:text-slate-200 rounded"
+          className="p-1 text-slate-500 hover:text-slate-300 rounded-md transition-colors hover:bg-white/5"
         >
-          <MoreVertical className="w-4 h-4" />
+          <MoreVertical className="w-3.5 h-3.5" />
         </button>
 
         {showMenu && (
-          <div className="absolute right-0 mt-1 bg-[#1C212E] border border-surface-border rounded-lg shadow-lg z-50 min-w-max">
+          <div
+            className="absolute right-0 top-full z-50 mt-1 min-w-max overflow-hidden rounded-lg shadow-xl"
+            style={{
+              background: 'rgba(22, 27, 38, 0.97)',
+              border: '1px solid rgba(255,255,255,0.08)',
+              backdropFilter: 'blur(12px)',
+            }}
+          >
             <button
               onClick={(e) => {
                 e.stopPropagation();
                 setIsEditing(true);
                 setShowMenu(false);
               }}
-              className="flex items-center gap-2 px-3 py-2 text-sm text-slate-300 hover:text-white hover:bg-surface-secondary transition-colors"
+              className="flex w-full items-center gap-2.5 px-3 py-2 text-sm text-slate-300 hover:bg-white/5 hover:text-white transition-colors"
             >
-              <Edit2 className="w-3.5 h-3.5" />
+              <Edit2 className="w-3.5 h-3.5 text-slate-500" />
               Rename
             </button>
             <button
@@ -119,7 +175,7 @@ export default function ConversationItem({ conversation }: ConversationItemProps
                 handleDelete();
                 setShowMenu(false);
               }}
-              className="flex items-center gap-2 px-3 py-2 text-sm text-red-400 hover:text-red-300 hover:bg-red-500/10 transition-colors"
+              className="flex w-full items-center gap-2.5 px-3 py-2 text-sm text-red-400 hover:bg-red-500/10 hover:text-red-300 transition-colors"
             >
               <Trash2 className="w-3.5 h-3.5" />
               Delete

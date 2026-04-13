@@ -66,51 +66,10 @@ const steps = [
   },
 ];
 
-const features = [
-  {
-    icon: Zap,
-    title: 'Lightning Fast',
-    description: 'Answers in under 3 seconds. Real SQL execution on your actual data — not approximations.',
-  },
-  {
-    icon: Lock,
-    title: 'Privacy First',
-    description: 'PII redaction happens client-side before any data is transmitted. Your sensitive data stays local.',
-  },
-  {
-    icon: MessageSquare,
-    title: 'Conversational',
-    description: 'Ask follow-up questions in a chat-like interface. G.I.N.A remembers context across your session.',
-  },
-  {
-    icon: FileText,
-    title: 'No SQL Required',
-    description: 'Turn plain English into production-grade SQL queries instantly. No technical expertise needed.',
-  },
-  {
-    icon: BarChart3,
-    title: 'Auto Visualization',
-    description: 'Charts and graphs are automatically generated based on the type of data in your answer.',
-  },
-  {
-    icon: ShieldCheck,
-    title: 'Grounded Answers',
-    description: 'Every answer references real rows in your file. No hallucinations — only facts from your data.',
-  },
-];
 
-const exampleQueries = [
-  'What was the total revenue in Q3?',
-  'Which product had the highest return rate?',
-  'Show me the top 5 customers by spend.',
-  'What is the average order value by region?',
-  'How many new users signed up last month?',
-  'Which sales rep closed the most deals?',
-];
 
 export default function HowItWorksPage() {
   const [showAuth, setShowAuth] = useState(false);
-  const [activeQuery, setActiveQuery] = useState(0);
 
   return (
     <div className="min-h-screen bg-surface flex flex-col font-sans text-slate-200 selection:bg-brand-indigo/30">
@@ -121,11 +80,11 @@ export default function HowItWorksPage() {
             G.I.N.A
           </Link>
           <nav className="hidden md:flex items-center gap-6 text-sm font-medium tracking-wide text-slate-300">
-            <Link href="/#how-it-works" className="hover:text-white transition-colors border-b border-white/30 pb-0.5">
+            <Link href="#steps" className="hover:text-white transition-colors border-b border-white/30 pb-0.5">
               HOW IT WORKS
             </Link>
-            <Link href="/#features" className="hover:text-white transition-colors">
-              FEATURES
+            <Link href="/" className="hover:text-white transition-colors">
+              HOME
             </Link>
           </nav>
         </div>

@@ -13,27 +13,31 @@ interface KeyboardShortcuts {
 export function useKeyboardShortcuts(shortcuts: KeyboardShortcuts) {
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Skip if typing in an input/textarea
       const target = e.target as HTMLElement;
-      if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') return;
+      const isInputField = target.tagName === 'INPUT' || target.tagName === 'TEXTAREA';
 
       const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
-      
-      // Check for Ctrl+K or Cmd+K
+
+      // Cmd/Ctrl+Enter works while focused in chat inputs (submit)
+      if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+        const key = isMac ? 'Cmd+Enter' : 'Ctrl+Enter';
+        const handler = shortcuts[key as keyof KeyboardShortcuts];
+        if (handler) {
+          e.preventDefault();
+          handler();
+        }
+        return;
+      }
+
+      // Other shortcuts: skip when typing in inputs (except where handled above)
+      if (isInputField) return;
+
       if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
         e.preventDefault();
         const key = isMac ? 'Cmd+K' : 'Ctrl+K';
         shortcuts[key as keyof KeyboardShortcuts]?.();
       }
-      
-      // Check for Ctrl+Enter or Cmd+Enter
-      if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
-        e.preventDefault();
-        const key = isMac ? 'Cmd+Enter' : 'Ctrl+Enter';
-        shortcuts[key as keyof KeyboardShortcuts]?.();
-      }
-      
-      // Check for Escape
+
       if (e.key === 'Escape') {
         shortcuts['Escape']?.();
       }

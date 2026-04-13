@@ -4,6 +4,8 @@ import React, { useState, useEffect, useRef } from 'react';
 import { getSemanticState, patchSemanticState } from '@/lib/api/datasets';
 import { buildSemanticCorrections } from '@/lib/semantic/corrections';
 import type { SemanticState, ColumnProfile } from '@/types';
+import { Button } from '@/components/ui/Button';
+import { Input } from '@/components/ui/Input';
 
 interface InlineCorrectionPanelProps {
   datasetId: string;
@@ -66,7 +68,7 @@ export function InlineCorrectionPanel({ datasetId, onClose, onSuccess }: InlineC
       if (onSuccess) onSuccess(updatedState);
       onClose();
     } catch (err: unknown) {
-      let message = err instanceof Error ? err.message : 'Failed to save corrections';
+      const message = err instanceof Error ? err.message : 'Failed to save corrections';
       setError(message);
     } finally {
       setSubmitting(false);
@@ -75,7 +77,7 @@ export function InlineCorrectionPanel({ datasetId, onClose, onSuccess }: InlineC
 
   return (
     <div className="mt-6 border border-surface-border rounded-xl bg-surface-secondary shadow-lg overflow-hidden animate-in slide-in-from-bottom-4 fade-in duration-300">
-      <div className="p-4 border-b border-surface-border flex items-center justify-between bg-[#1C212E]">
+      <div className="p-4 border-b border-surface-border flex items-center justify-between bg-surface-tertiary">
         <h3 className="text-sm font-semibold text-slate-100 flex items-center gap-2">
           <span>🛠️</span> Semantic Corrections
         </h3>
@@ -99,7 +101,7 @@ export function InlineCorrectionPanel({ datasetId, onClose, onSuccess }: InlineC
           </div>
         ) : (
           <table className="w-full text-left text-xs text-slate-300">
-            <thead className="bg-[#141822] uppercase text-[10px] text-slate-500 tracking-wider">
+            <thead className="bg-surface-secondary uppercase text-[10px] text-slate-500 tracking-wider">
               <tr>
                 <th className="px-3 py-2 border-b border-surface-border">Column</th>
                 <th className="px-3 py-2 border-b border-surface-border">Label</th>
@@ -111,11 +113,11 @@ export function InlineCorrectionPanel({ datasetId, onClose, onSuccess }: InlineC
                 <tr key={col.columnName} className="hover:bg-surface/50 transition-colors">
                   <td className="px-3 py-2 font-mono">{col.columnName}</td>
                   <td className="px-3 py-2">
-                    <input
+                    <Input
                       type="text"
                       value={col.businessLabel}
                       onChange={(e) => handleUpdate(idx, 'businessLabel', e.target.value)}
-                      className="w-full bg-surface border border-surface-border rounded px-2 py-1 focus:outline-none focus:border-brand-teal text-slate-200 text-xs"
+                      className="h-7 text-xs bg-surface"
                     />
                   </td>
                   <td className="px-3 py-2">
@@ -139,20 +141,22 @@ export function InlineCorrectionPanel({ datasetId, onClose, onSuccess }: InlineC
         )}
       </div>
 
-      <div className="p-3 bg-[#141822] border-t border-surface-border flex justify-end gap-2">
-        <button
+      <div className="p-3 bg-surface-secondary border-t border-surface-border flex justify-end gap-2">
+        <Button
+          variant="ghost"
+          size="sm"
           onClick={onClose}
-          className="px-3 py-1.5 rounded-lg border border-surface-border text-slate-300 hover:text-white transition-colors text-xs font-medium"
         >
           Cancel
-        </button>
-        <button
+        </Button>
+        <Button
           onClick={handleSubmit}
           disabled={submitting || loading}
-          className="px-4 py-1.5 rounded-lg bg-brand-teal text-white shadow-lg shadow-brand-teal/20 text-xs font-medium hover:bg-brand-teal-light transition-all disabled:opacity-50 flex items-center gap-2"
+          size="sm"
+          className="bg-brand-teal hover:bg-brand-teal-light text-white font-medium"
         >
           {submitting ? 'Applying...' : 'Apply Correction'}
-        </button>
+        </Button>
       </div>
     </div>
   );

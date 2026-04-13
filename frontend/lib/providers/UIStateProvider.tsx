@@ -1,12 +1,15 @@
 'use client';
 
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import { usePathname } from 'next/navigation';
 import type { ChartType, ChartData } from '@/types';
 import { postSnapshotToggle } from '@/lib/api/debug';
+import { useToast } from '@/lib/providers/ToastProvider';
 
 interface PinnedChartState {
   type: ChartType;
   data: ChartData;
+  title?: string;
 }
 
 interface UIStateContextType {
@@ -14,6 +17,11 @@ interface UIStateContextType {
   setPinnedChart: (chart: PinnedChartState | null) => void;
   isSnapshotMode: boolean;
   toggleSnapshotMode: () => Promise<void>;
+  // InsightPanel
+  insightPanelOpen: boolean;
+  activeInsight: PinnedChartState | null;
+  openInsight: (type: ChartType, data: ChartData, title?: string) => void;
+  closeInsight: () => void;
 }
 
 const UIStateContext = createContext<UIStateContextType | undefined>(undefined);
@@ -21,17 +29,37 @@ const UIStateContext = createContext<UIStateContextType | undefined>(undefined);
 export function UIStateProvider({ children }: { children: React.ReactNode }) {
   const [pinnedChart, setPinnedChart] = useState<PinnedChartState | null>(null);
   const [isSnapshotMode, setIsSnapshotMode] = useState(false);
-  const [showToast, setShowToast] = useState(false);
-  const [toastMessage, setToastMessage] = useState('');
+
+  const { showToast } = useToast();
+
+  // InsightPanel state
+  const [insightPanelOpen, setInsightPanelOpen] = useState(false);
+  const [activeInsight, setActiveInsight] = useState<PinnedChartState | null>(null);
+
+  const pathname = usePathname();
+
+  // Chat-scoped active insight: clear when navigating to different chats
+  useEffect(() => {
+    setActiveInsight(null);
+    // If we only were showing active insight and not pinned, close the panel
+    setInsightPanelOpen(false);
+  }, [pathname]);
+
+  const openInsight = useCallback((type: ChartType, data: ChartData, title?: string) => {
+    setActiveInsight({ type, data, title });
+    setInsightPanelOpen(true);
+  }, []);
+
+  const closeInsight = useCallback(() => {
+    setInsightPanelOpen(false);
+  }, []);
 
   const toggleSnapshotMode = async () => {
     try {
       const res = await postSnapshotToggle();
       const next = res.snapshotMode;
       setIsSnapshotMode(next);
-      setToastMessage(`Snapshot mode ${next ? 'enabled' : 'disabled'}`);
-      setShowToast(true);
-      setTimeout(() => setShowToast(false), 3000);
+      showToast(`Snapshot mode ${next ? 'enabled' : 'disabled'}`, 'info', 3000);
     } catch (e) {
       console.error('Failed to toggle snapshot mode:', e);
     }
@@ -41,25 +69,31 @@ export function UIStateProvider({ children }: { children: React.ReactNode }) {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === 'd') {
         e.preventDefault();
-        toggleSnapshotMode();
+        void toggleSnapshotMode();
+      }
+      // Escape closes insight panel
+      if (e.key === 'Escape' && insightPanelOpen) {
+        closeInsight();
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, []);
+  }, [insightPanelOpen, closeInsight]);
 
   return (
-    <UIStateContext.Provider value={{ pinnedChart, setPinnedChart, isSnapshotMode, toggleSnapshotMode }}>
+    <UIStateContext.Provider
+      value={{
+        pinnedChart,
+        setPinnedChart,
+        isSnapshotMode,
+        toggleSnapshotMode,
+        insightPanelOpen,
+        activeInsight,
+        openInsight,
+        closeInsight,
+      }}
+    >
       {children}
-      
-      {/* Toast Notification */}
-      <div 
-        className={`fixed bottom-6 right-6 px-4 py-2 rounded-lg bg-[#1C212E] border border-[#2A3143] shadow-lg shadow-black/50 text-amber-500 font-medium tracking-wide z-50 transition-all duration-300 ${
-          showToast ? 'translate-y-0 opacity-100' : 'translate-y-10 opacity-0 pointer-events-none'
-        }`}
-      >
-        {toastMessage}
-      </div>
     </UIStateContext.Provider>
   );
 }

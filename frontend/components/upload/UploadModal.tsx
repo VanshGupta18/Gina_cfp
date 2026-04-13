@@ -1,20 +1,25 @@
 'use client';
 
 import React, { useState, useRef, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
 import { runPIIShield } from '@/lib/pii/shield';
 import { uploadDataset } from '@/lib/api/datasets';
+import { createConversation } from '@/lib/api/conversations';
 import { useDatasets } from '@/lib/hooks/useDatasets';
 import PIISummaryBanner from './PIISummaryBanner';
 import UnderstandingCard from './UnderstandingCard';
 import { InlineCorrectionPanel } from '@/components/semantic/InlineCorrectionPanel';
-import { UploadCloud, ShieldAlert, CheckCircle2, ChevronRight, X, Sparkles } from 'lucide-react';
+import { UploadCloud, ShieldAlert, CheckCircle2, ChevronRight, RotateCcw } from 'lucide-react';
+import { Modal } from '@/components/ui/Modal';
+import { Button } from '@/components/ui/Button';
 
 interface UploadModalProps {
   onClose: () => void;
 }
 
 export default function UploadModal({ onClose }: UploadModalProps) {
-  const { refreshDatasets } = useDatasets();
+  const { setActiveDataset, refreshDatasets } = useDatasets();
+  const router = useRouter();
   
   const [isDragging, setIsDragging] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -23,6 +28,7 @@ export default function UploadModal({ onClose }: UploadModalProps) {
   // Custom states for steps (01 Intake, 02 Risk, 03 Mapping)
   const [step, setStep] = useState<1 | 2 | 3>(1);
   const [redactedColumns, setRedactedColumns] = useState<string[]>([]);
+  const [redactedFileMemo, setRedactedFileMemo] = useState<File | null>(null);
   const [understandingCard, setUnderstandingCard] = useState<string | null>(null);
   const [uploadedDatasetId, setUploadedDatasetId] = useState<string | null>(null);
   const [correctionModalOpen, setCorrectionModalOpen] = useState(false);
@@ -62,12 +68,28 @@ export default function UploadModal({ onClose }: UploadModalProps) {
         // Step 1 done -> Move to Step 2 (Risk Mitigation view implicitly inside processing)
         const { redactedFile, redactedColumns: cols } = await runPIIShield(file);
         setRedactedColumns(cols);
+        setRedactedFileMemo(redactedFile);
         
         // Show step 2 for at least a beat
         setStep(2);
 
         // Upload and get understanding
-        const result = await uploadDataset(redactedFile);
+        await performUpload(redactedFile);
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : 'Failed to process and upload dataset';
+        setError(message);
+        setStep(1); // processing failed early, go back to 1
+        setIsProcessing(false);
+      }
+    },
+    [refreshDatasets],
+  );
+
+  const performUpload = async (fileToUpload: File) => {
+      setIsProcessing(true);
+      setError(null);
+      try {
+        const result = await uploadDataset(fileToUpload);
 
         setUnderstandingCard(result.understandingCard);
         setUploadedDatasetId(result.dataset.id);
@@ -76,15 +98,31 @@ export default function UploadModal({ onClose }: UploadModalProps) {
         setStep(3);
         await refreshDatasets();
       } catch (err: unknown) {
-        const message = err instanceof Error ? err.message : 'Failed to process and upload dataset';
+        const message = err instanceof Error ? err.message : 'Upload failed. Please try again.';
         setError(message);
-        setStep(1);
+        // Do NOT go back to step 1. Stay on step 2 so they can retry.
       } finally {
         setIsProcessing(false);
       }
-    },
-    [refreshDatasets],
-  );
+  };
+
+  const handleStartAsking = async () => {
+    if (!uploadedDatasetId) return;
+    
+    setIsProcessing(true); // Re-use processing state for button spin
+    try {
+      setActiveDataset(uploadedDatasetId);
+      const newConv = await createConversation(uploadedDatasetId, "New Conversation");
+      onClose();
+      if (newConv) {
+        router.push(`/app/${newConv.id}`);
+      }
+    } catch (e) {
+      console.error(e);
+      // Fallback
+      onClose();
+    }
+  };
 
   const onDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -117,32 +155,30 @@ export default function UploadModal({ onClose }: UploadModalProps) {
   );
 
   return (
-    <>
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#0F121A]/80 backdrop-blur-md p-4">
-      <div className="relative w-full max-w-[540px] bg-[#141822] border border-surface-border rounded-xl shadow-2xl flex flex-col pt-8 pb-10 px-10">
-        
-        {/* State Steps Subheader */}
-        <div className="text-xs font-bold tracking-widest text-slate-500 uppercase mb-8">
-          {step === 1 && 'STATE 01: INITIAL INTAKE'}
-          {step === 2 && 'STATE 02: RISK MITIGATION'}
-          {step === 3 && 'STATE 03: INTELLIGENCE MAPPING'}
-        </div>
-
-        {/* Header */}
-        <div className="flex items-center justify-between mb-6">
-          <h2 className="text-2xl font-bold text-white">
-            {step === 1 && 'Upload a dataset'}
-            {step === 2 && 'Verify protection layers'}
-            {step === 3 && <span className="flex items-center gap-3"><span className="w-5 h-5 rounded-full border-2 border-brand-indigo border-t-transparent animate-spin"/> Analysing your data...</span>}
-          </h2>
-          {step === 1 && (
-            <button
-              onClick={onClose}
-              className="text-slate-400 hover:text-slate-200 transition-colors"
-            >
-              <X className="w-5 h-5" />
-            </button>
-          )}
+    <Modal
+      isOpen={true}
+      onClose={onClose}
+      title={
+        step === 1 ? 'Upload a dataset' :
+        step === 2 ? 'Verify protection layers' :
+        'Analysis complete'
+      }
+    >
+      <div className="flex flex-col">
+        {/* Step indicator pills */}
+        <div className="flex items-center gap-2 mb-8">
+          {[1,2,3].map((s) => (
+            <div
+              key={s}
+              className="h-1 rounded-full transition-all duration-300"
+              style={{
+                width: step >= s ? '24px' : '8px',
+                background: step >= s
+                  ? 'linear-gradient(90deg, #5A4EE3, #3CE0D6)'
+                  : 'rgba(255,255,255,0.10)',
+              }}
+            />
+          ))}
         </div>
 
         {error && (
@@ -153,17 +189,36 @@ export default function UploadModal({ onClose }: UploadModalProps) {
 
         {/* STEP 1: INITIAL INTAKE */}
         {step === 1 && (
-          <div className="flex flex-col gap-6">
+          <div className="flex flex-col gap-5">
             <div
               onDragOver={onDragOver}
               onDragLeave={onDragLeave}
               onDrop={onDrop}
               onClick={() => fileInputRef.current?.click()}
-              className={`border border-dashed rounded-xl p-10 flex flex-col items-center justify-center text-center cursor-pointer transition-colors ${
-                isDragging 
-                  ? 'border-brand-indigo bg-brand-indigo/5' 
-                  : 'border-slate-600 hover:border-slate-400 hover:bg-white/[0.02]'
-              }`}
+              className="flex flex-col items-center justify-center text-center cursor-pointer transition-all duration-200 rounded-xl p-10"
+              style={{
+                border: isDragging
+                  ? '2px dashed rgba(90,78,227,0.7)'
+                  : '2px dashed rgba(90,78,227,0.25)',
+                background: isDragging
+                  ? 'rgba(90,78,227,0.07)'
+                  : 'rgba(15,18,26,0.5)',
+                boxShadow: isDragging
+                  ? 'inset 0 0 40px rgba(90,78,227,0.08)'
+                  : 'none',
+              }}
+              onMouseEnter={(e) => {
+                if (!isDragging) {
+                  (e.currentTarget as HTMLDivElement).style.borderColor = 'rgba(90,78,227,0.45)';
+                  (e.currentTarget as HTMLDivElement).style.background = 'rgba(90,78,227,0.04)';
+                }
+              }}
+              onMouseLeave={(e) => {
+                if (!isDragging) {
+                  (e.currentTarget as HTMLDivElement).style.borderColor = 'rgba(90,78,227,0.25)';
+                  (e.currentTarget as HTMLDivElement).style.background = 'rgba(15,18,26,0.5)';
+                }
+              }}
             >
               <input
                 type="file"
@@ -172,35 +227,43 @@ export default function UploadModal({ onClose }: UploadModalProps) {
                 ref={fileInputRef}
                 onChange={onFileChange}
               />
-              
-              <div className="mb-4 text-brand-indigo">
-                <UploadCloud className="w-10 h-10" strokeWidth={1.5} />
+
+              <div
+                className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl"
+                style={{
+                  background: 'rgba(90,78,227,0.12)',
+                  border: '1px solid rgba(90,78,227,0.25)',
+                }}
+              >
+                <UploadCloud className="w-7 h-7 text-brand-indigo-light" strokeWidth={1.5} />
               </div>
-              
-              <h3 className="text-lg font-medium text-slate-200 mb-1">
+
+              <h3 className="text-base font-semibold text-slate-200 mb-1">
                 Drop your CSV file here
               </h3>
-              <div className="text-base text-slate-400 mb-4 inline-flex items-center gap-1">
-                or <span className="text-brand-indigo-light hover:underline font-medium">click to browse</span>
+              <div className="text-sm text-slate-500 mb-3 inline-flex items-center gap-1">
+                or <span className="text-brand-indigo-light font-medium">click to browse</span>
               </div>
-              
-              <p className="text-xs text-slate-500">
-                .csv only · max 50MB
-              </p>
+              <p className="text-xs text-slate-600">.csv only · max 50MB</p>
             </div>
 
-            <div className="bg-surface-secondary border border-surface-border rounded-xl p-4 flex items-start gap-4">
-              <div className="mt-0.5 text-emerald-400">
-                <ShieldAlert className="w-5 h-5" strokeWidth={2} />
+            <div
+              className="flex items-start gap-3 rounded-xl p-4"
+              style={{
+                background: 'rgba(60,224,214,0.05)',
+                border: '1px solid rgba(60,224,214,0.18)',
+              }}
+            >
+              <div className="mt-0.5 text-emerald-400 shrink-0">
+                <ShieldAlert className="w-4 h-4" strokeWidth={2} />
               </div>
-              <p className="text-sm text-slate-300 leading-relaxed">
+              <p className="text-sm text-slate-400 leading-relaxed">
                 PII automatically detected and redacted. Your data remains private and encrypted under G.I.N.A core security protocols.
               </p>
             </div>
 
-            <div className="flex justify-between items-center mt-2">
-              <button onClick={onClose} className="text-sm font-medium text-slate-400 hover:text-white transition">Cancel</button>
-              <button disabled className="px-6 py-2.5 bg-surface-tertiary text-slate-400 rounded-lg text-sm font-medium cursor-not-allowed">Upload</button>
+            <div className="flex justify-end items-center mt-1">
+              <Button variant="ghost" onClick={onClose} className="mr-0 font-medium">Cancel</Button>
             </div>
           </div>
         )}
@@ -238,10 +301,23 @@ export default function UploadModal({ onClose }: UploadModalProps) {
             </p>
 
             <div className="flex justify-between items-center mt-2">
-              <button onClick={() => setStep(1)} className="text-sm font-medium text-slate-400 hover:text-white transition">Cancel</button>
-              <button disabled className="px-6 py-2.5 bg-brand-indigo text-white rounded-lg text-sm font-semibold flex items-center gap-2 opacity-70">
-                Processing <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"/>
-              </button>
+              <Button variant="ghost" onClick={() => setStep(1)} className="px-0 hover:bg-transparent">
+                Go back
+              </Button>
+              
+              {isProcessing ? (
+                <Button variant="primary" disabled className="gap-2">
+                  Processing <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"/>
+                </Button>
+              ) : (
+                <Button 
+                  variant="danger"
+                  onClick={() => redactedFileMemo && performUpload(redactedFileMemo)}
+                  className="gap-2"
+                >
+                  <RotateCcw className="w-4 h-4" /> Retry Upload
+                </Button>
+              )}
             </div>
           </div>
         )}
@@ -266,21 +342,27 @@ export default function UploadModal({ onClose }: UploadModalProps) {
             )}
 
             <div className="flex justify-between items-center mt-2 border-t border-surface-border pt-6">
-              <button onClick={onClose} className="text-sm font-medium text-slate-400 hover:text-white transition">Upload another</button>
-              <button 
-                onClick={onClose} 
-                className="px-6 py-2.5 hover:bg-brand-indigo-light bg-brand-indigo text-white rounded-lg text-sm font-semibold flex items-center justify-center gap-2 transition-colors group"
+              <Button variant="ghost" onClick={() => setStep(1)} className="px-0 hover:bg-transparent">Upload another</Button>
+              <Button 
+                variant="primary"
+                onClick={handleStartAsking} 
+                disabled={isProcessing}
+                className="gap-2 group"
               >
-                Start asking questions
-                <ChevronRight className="w-4 h-4 group-hover:translate-x-0.5 transition-transform" />
-              </button>
+                {isProcessing ? (
+                  <>Starting... <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"/></>
+                ) : (
+                  <>
+                    Start asking questions
+                    <ChevronRight className="w-4 h-4 group-hover:translate-x-0.5 transition-transform" />
+                  </>
+                )}
+              </Button>
             </div>
           </div>
         )}
 
       </div>
-    </div>
-
-    </>
+    </Modal>
   );
 }

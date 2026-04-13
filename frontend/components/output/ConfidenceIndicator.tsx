@@ -1,41 +1,50 @@
 import React from 'react';
-import { ThumbsUp, ThumbsDown } from 'lucide-react';
 
 export function ConfidenceIndicator({ score }: { score: number }) {
   if (score === undefined || score === null) return null;
 
-  let colorClass = 'bg-brand-cyan';
-  let textColor = 'text-brand-cyan';
+  let barColor = 'rgba(60,224,214,0.9)';
+  let textColor = '#3CE0D6';
+  let bgColor = 'rgba(60,224,214,0.08)';
+  let borderColor = 'rgba(60,224,214,0.20)';
+
   if (score <= 40) {
-    colorClass = 'bg-red-500';
-    textColor = 'text-red-500';
+    barColor = 'rgba(239,68,68,0.9)';
+    textColor = '#EF4444';
+    bgColor = 'rgba(239,68,68,0.08)';
+    borderColor = 'rgba(239,68,68,0.20)';
   } else if (score <= 70) {
-    colorClass = 'bg-brand-amber';
-    textColor = 'text-brand-amber';
+    barColor = 'rgba(245,158,11,0.9)';
+    textColor = '#F59E0B';
+    bgColor = 'rgba(245,158,11,0.08)';
+    borderColor = 'rgba(245,158,11,0.20)';
   }
 
   return (
-    <div className="flex items-center gap-4">
-      <div className="flex flex-col items-end gap-1 w-20 shrink-0">
-        <span className="text-[10px] font-bold tracking-widest text-slate-500 uppercase">CONFIDENCE</span>
-        <div className="flex items-center gap-2">
-          <span className={`text-[11px] font-mono font-bold ${textColor}`}>{score}%</span>
-          <div className="w-12 h-1 bg-surface-border rounded-full overflow-hidden shrink-0">
-            <div 
-              className={`h-full ${colorClass} transition-all duration-1000 ease-out`} 
-              style={{ width: `${score}%` }} 
-            />
-          </div>
+    <div
+      className="flex flex-col items-end gap-1.5 rounded-xl px-3 py-2 shrink-0"
+      style={{ background: bgColor, border: `1px solid ${borderColor}` }}
+    >
+      <span className="text-[9px] font-bold tracking-[0.15em] uppercase" style={{ color: 'rgba(100,116,139,0.8)' }}>
+        Confidence
+      </span>
+      <div className="flex items-center gap-2">
+        <span className="text-sm font-bold font-mono" style={{ color: textColor }}>
+          {score}%
+        </span>
+        <div
+          className="w-14 h-1.5 rounded-full overflow-hidden shrink-0"
+          style={{ background: 'rgba(42,48,60,0.6)' }}
+        >
+          <div
+            className="h-full rounded-full transition-all duration-1000 ease-out"
+            style={{
+              width: `${score}%`,
+              background: barColor,
+              boxShadow: `0 0 6px ${barColor}`,
+            }}
+          />
         </div>
-      </div>
-      
-      <div className="flex items-center gap-1 text-slate-500">
-        <button className="p-1 hover:text-slate-300 hover:bg-surface-border rounded transition-colors">
-          <ThumbsUp className="w-3.5 h-3.5" />
-        </button>
-        <button className="p-1 hover:text-slate-300 hover:bg-surface-border rounded transition-colors">
-          <ThumbsDown className="w-3.5 h-3.5" />
-        </button>
       </div>
     </div>
   );
