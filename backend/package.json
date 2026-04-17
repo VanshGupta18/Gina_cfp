@@ -29,6 +29,7 @@
     "papaparse": "^5",
     "pg": "^8",
     "pgvector": "^0.2",
+    "xlsx": "^0.18.5",
     "zod": "^3"
   },
   "devDependencies": {

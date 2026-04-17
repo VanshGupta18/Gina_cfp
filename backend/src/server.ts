@@ -39,6 +39,8 @@ async function main() {
   await app.register(multipart, {
     limits: {
       fileSize: MAX_CSV_UPLOAD_BYTES,
+      /** Large JSON payload for per-sheet redacted CSV text */
+      fieldSize: MAX_CSV_UPLOAD_BYTES,
     },
   });
   await app.register(dbPlugin);

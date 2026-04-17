@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import TopBar from './TopBar';
 import ConversationRail from './ConversationRail';
 import InsightPanel from './InsightPanel';
+import { DatasetSheetPanel } from '@/components/dataset/DatasetSheetPanel';
 import { CorrectionModal } from '@/components/upload/CorrectionModal';
 import { useDatasets } from '@/lib/hooks/useDatasets';
 import { useUIState } from '@/lib/providers/UIStateProvider';
@@ -12,6 +13,7 @@ import { BarChart2, ChevronRight } from 'lucide-react';
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const [mobileRailOpen, setMobileRailOpen] = useState(false);
   const [correctionOpen, setCorrectionOpen] = useState(false);
+  const [datasetSheetOpen, setDatasetSheetOpen] = useState(false);
   const { activeDataset, refreshDatasets } = useDatasets();
   const { insightPanelOpen, openInsight, activeInsight, pinnedChart, setPinnedChart } = useUIState();
 
@@ -19,15 +21,9 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     // We already have a specific function on useUIState, but we just need it open.
     // openInsight sets activeInsight.
     if (activeInsight) {
-      openInsight(activeInsight.type, activeInsight.data, activeInsight.title);
-    } else {
-      // Just toggle state via clicking a dummy openInsight if we have to, 
-      // but UIStateProvider doesn't expose setInsightPanelOpen directly.
-      // We can just call openInsight with pinnedChart info. Since it's pinned anyway,
-      // setting it to activeInsight temporarily doesn't break anything.
-      if (pinnedChart) {
-         openInsight(pinnedChart.type, pinnedChart.data, pinnedChart.title);
-      }
+      openInsight(activeInsight);
+    } else if (pinnedChart) {
+      openInsight(pinnedChart);
     }
   };
 
@@ -38,6 +34,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       <TopBar
         onMenuClick={() => setMobileRailOpen(true)}
         onOpenSemanticCorrections={() => setCorrectionOpen(true)}
+        onOpenDatasetSheet={() => setDatasetSheetOpen(true)}
       />
 
       <div className="flex min-h-0 flex-1 overflow-hidden">
@@ -97,6 +94,15 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             setCorrectionOpen(false);
             void refreshDatasets();
           }}
+        />
+      )}
+
+      {datasetSheetOpen && activeDataset && (
+        <DatasetSheetPanel
+          open={datasetSheetOpen}
+          onClose={() => setDatasetSheetOpen(false)}
+          datasetId={activeDataset.id}
+          datasetName={activeDataset.name}
         />
       )}
     </div>

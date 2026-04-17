@@ -18,15 +18,21 @@ import {
   Upload,
   Sparkles,
   Database,
+  Table2,
 } from 'lucide-react';
 import clsx from 'clsx';
 
 interface TopBarProps {
   onMenuClick: () => void;
   onOpenSemanticCorrections: () => void;
+  onOpenDatasetSheet: () => void;
 }
 
-export default function TopBar({ onMenuClick, onOpenSemanticCorrections }: TopBarProps) {
+export default function TopBar({
+  onMenuClick,
+  onOpenSemanticCorrections,
+  onOpenDatasetSheet,
+}: TopBarProps) {
   const router = useRouter();
   const { user, signOut } = useAuth();
   const { datasets, activeDataset, setActiveDataset } = useDatasets();
@@ -208,6 +214,20 @@ export default function TopBar({ onMenuClick, onOpenSemanticCorrections }: TopBa
             <Plus className="h-4 w-4" />
           )}
           New chat
+        </button>
+
+        {/* Dataset table preview */}
+        <button
+          type="button"
+          onClick={onOpenDatasetSheet}
+          disabled={!activeDataset}
+          className="btn-press flex h-9 w-9 items-center justify-center rounded-lg border text-slate-300 transition-all duration-200 disabled:cursor-not-allowed disabled:opacity-40 sm:h-auto sm:w-auto sm:gap-1.5 sm:px-3 sm:py-2"
+          style={{ borderColor: 'rgba(255,255,255,0.10)', background: 'rgba(255,255,255,0.04)' }}
+          title="View uploaded data"
+          aria-label="View uploaded data as table"
+        >
+          <Table2 className="h-4 w-4 shrink-0" />
+          <span className="hidden sm:inline text-xs font-medium">Data</span>
         </button>
 
         {/* Upload */}

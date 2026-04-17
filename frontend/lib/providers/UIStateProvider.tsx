@@ -2,39 +2,43 @@
 
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { usePathname } from 'next/navigation';
-import type { ChartType, ChartData } from '@/types';
+import type { ChartType, ChartData, QueryResultTable } from '@/types';
 import { postSnapshotToggle } from '@/lib/api/debug';
 import { useToast } from '@/lib/providers/ToastProvider';
 
-interface PinnedChartState {
+/** Right-hand insight panel: chart + optional raw SQL result table. */
+export interface InsightState {
   type: ChartType;
   data: ChartData;
   title?: string;
+  resultTable?: QueryResultTable | null;
+  resultTruncated?: boolean;
+  explanation?: string;
 }
 
 interface UIStateContextType {
-  pinnedChart: PinnedChartState | null;
-  setPinnedChart: (chart: PinnedChartState | null) => void;
+  pinnedChart: InsightState | null;
+  setPinnedChart: (chart: InsightState | null) => void;
   isSnapshotMode: boolean;
   toggleSnapshotMode: () => Promise<void>;
   // InsightPanel
   insightPanelOpen: boolean;
-  activeInsight: PinnedChartState | null;
-  openInsight: (type: ChartType, data: ChartData, title?: string) => void;
+  activeInsight: InsightState | null;
+  openInsight: (insight: InsightState) => void;
   closeInsight: () => void;
 }
 
 const UIStateContext = createContext<UIStateContextType | undefined>(undefined);
 
 export function UIStateProvider({ children }: { children: React.ReactNode }) {
-  const [pinnedChart, setPinnedChart] = useState<PinnedChartState | null>(null);
+  const [pinnedChart, setPinnedChart] = useState<InsightState | null>(null);
   const [isSnapshotMode, setIsSnapshotMode] = useState(false);
 
   const { showToast } = useToast();
 
   // InsightPanel state
   const [insightPanelOpen, setInsightPanelOpen] = useState(false);
-  const [activeInsight, setActiveInsight] = useState<PinnedChartState | null>(null);
+  const [activeInsight, setActiveInsight] = useState<InsightState | null>(null);
 
   const pathname = usePathname();
 
@@ -45,8 +49,8 @@ export function UIStateProvider({ children }: { children: React.ReactNode }) {
     setInsightPanelOpen(false);
   }, [pathname]);
 
-  const openInsight = useCallback((type: ChartType, data: ChartData, title?: string) => {
-    setActiveInsight({ type, data, title });
+  const openInsight = useCallback((insight: InsightState) => {
+    setActiveInsight(insight);
     setInsightPanelOpen(true);
   }, []);
 

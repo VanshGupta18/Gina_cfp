@@ -8,9 +8,11 @@ interface SQLExpandProps {
   sql: string;
   secondarySql?: string | null;
   rowsReturned?: number;
+  /** One-paragraph transparency trace (SQL analytics path). */
+  explanation?: string;
 }
 
-export function SQLExpand({ sql, secondarySql, rowsReturned }: SQLExpandProps) {
+export function SQLExpand({ sql, secondarySql, rowsReturned, explanation }: SQLExpandProps) {
   const [expanded, setExpanded] = useState(false);
   const [copiedSql, setCopiedSql] = useState<'primary' | 'secondary' | null>(null);
   const { showToast } = useToast();
@@ -75,6 +77,12 @@ export function SQLExpand({ sql, secondarySql, rowsReturned }: SQLExpandProps) {
 
       {expanded && (
         <div className="p-4 border-t border-surface-border bg-surface-secondary">
+          {explanation?.trim() ? (
+            <div className="mb-4 rounded-lg border border-white/[0.06] bg-[#0F121A]/80 px-3 py-2.5">
+              <p className="text-[10px] font-bold tracking-wider text-slate-500 mb-1.5">IN SHORT</p>
+              <p className="text-xs leading-relaxed text-slate-400">{explanation.trim()}</p>
+            </div>
+          ) : null}
           <div className="mb-2">
             <div className="flex items-center justify-between mb-2">
               <span className="text-[10px] font-bold tracking-wider text-slate-500">PRIMARY SQL</span>

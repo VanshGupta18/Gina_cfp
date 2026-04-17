@@ -1,6 +1,6 @@
 /**
  * Loads backend/.env so DATABASE_URL is set (npm scripts do not load .env by default).
- * Then runs: psql <DATABASE_URL> -f migrations/001_initial_schema.sql
+ * Then runs migrations in order via psql.
  */
 import { spawnSync } from 'node:child_process';
 import { config } from 'dotenv';
@@ -20,20 +20,27 @@ if (!url) {
   process.exit(1);
 }
 
-const migrationFile = join(root, 'migrations', '001_initial_schema.sql');
+const migrationFiles = ['001_initial_schema.sql', '002_dataset_content_hash.sql'];
 
-const result = spawnSync('psql', [url, '-f', migrationFile], {
-  stdio: 'inherit',
-  cwd: root,
-  env: process.env,
-});
+for (const name of migrationFiles) {
+  const migrationFile = join(root, 'migrations', name);
+  const result = spawnSync('psql', [url, '-f', migrationFile], {
+    stdio: 'inherit',
+    cwd: root,
+    env: process.env,
+  });
 
-if (result.error) {
-  console.error(
-    'Could not run psql. Install PostgreSQL client tools and ensure psql is on your PATH.',
-  );
-  console.error(result.error.message);
-  process.exit(1);
+  if (result.error) {
+    console.error(
+      'Could not run psql. Install PostgreSQL client tools and ensure psql is on your PATH.',
+    );
+    console.error(result.error.message);
+    process.exit(1);
+  }
+
+  if (result.status !== 0 && result.status !== null) {
+    process.exit(result.status);
+  }
 }
 
-process.exit(result.status === null ? 1 : result.status);
+process.exit(0);

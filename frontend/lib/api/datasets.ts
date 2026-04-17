@@ -1,5 +1,12 @@
-import { apiFetch, createFormData } from './client';
-import type { Dataset, UploadResult, SemanticState, SemanticCorrection } from '@/types';
+import { apiFetch } from './client';
+import type {
+  Dataset,
+  UploadResult,
+  SemanticState,
+  SemanticCorrection,
+  DatasetPreviewResponse,
+} from '@/types';
+import type { IngestionPayloadV1 } from '@/lib/pii/prepareIngestion';
 
 /**
  * Datasets API endpoints
@@ -10,8 +17,14 @@ export async function listDatasets(): Promise<Dataset[]> {
   return response.datasets;
 }
 
-export async function uploadDataset(file: File): Promise<UploadResult> {
-  const formData = createFormData({ file });
+/**
+ * Upload original file + redacted per-sheet CSV JSON (`ingestion`).
+ * Backend stores the original bytes in S3 as-is and ingests redacted CSVs.
+ */
+export async function uploadDataset(file: File, ingestion: IngestionPayloadV1): Promise<UploadResult> {
+  const formData = new FormData();
+  formData.append('file', file);
+  formData.append('ingestion', JSON.stringify(ingestion));
 
   const response = await apiFetch<UploadResult>('/api/datasets/upload', {
     method: 'POST',
@@ -24,6 +37,18 @@ export async function uploadDataset(file: File): Promise<UploadResult> {
 export async function getSemanticState(datasetId: string): Promise<SemanticState> {
   const response = await apiFetch<SemanticState>(`/api/datasets/${datasetId}/semantic`);
   return response;
+}
+
+export async function getDatasetPreview(
+  datasetId: string,
+  options?: { limit?: number; offset?: number }
+): Promise<DatasetPreviewResponse> {
+  const params = new URLSearchParams();
+  if (options?.limit != null) params.set('limit', String(options.limit));
+  if (options?.offset != null) params.set('offset', String(options.offset));
+  const q = params.toString();
+  const path = `/api/datasets/${datasetId}/preview${q ? `?${q}` : ''}`;
+  return apiFetch<DatasetPreviewResponse>(path);
 }
 
 export async function patchSemanticState(

@@ -2,7 +2,7 @@
 
 import React, { memo } from 'react';
 import { OutputPayload } from '@/types';
-import { BarChart2, ArrowUpRight } from 'lucide-react';
+import { BarChart2, ArrowUpRight, Timer } from 'lucide-react';
 import { useUIState } from '@/lib/providers/UIStateProvider';
 
 import { KeyFigure } from './KeyFigure';
@@ -17,6 +17,11 @@ import { DataTable } from '../charts/DataTable';
 export interface OutputCardProps {
   payload: OutputPayload;
   onCorrectionClick?: () => void;
+}
+
+function formatAnswerTime(ms: number): string {
+  if (!Number.isFinite(ms) || ms < 0) return '';
+  return `Answer ready in ${Math.round(ms)} ms`;
 }
 
 function chartLabel(type: string): string {
@@ -37,8 +42,18 @@ function OutputCardImpl({ payload, onCorrectionClick }: OutputCardProps) {
   if (!payload) return null;
 
   const hasChart = payload.chartType && payload.chartData;
-  // We show a "chart chip" for non-table charts, tables remain in-line to preserve readability
+  // Tables render inline for readability; we still offer Insights for chart vs raw SQL data tabs.
   const showTableInline = payload.chartType === 'table';
+
+  const openThisInsight = () =>
+    openInsight({
+      type: payload.chartType!,
+      data: payload.chartData!,
+      title: chartLabel(payload.chartType!),
+      resultTable: payload.resultTable ?? null,
+      resultTruncated: payload.resultTruncated,
+      explanation: payload.explanation,
+    });
 
   return (
     <div className="flex flex-col gap-5">
@@ -63,16 +78,14 @@ function OutputCardImpl({ payload, onCorrectionClick }: OutputCardProps) {
           <NarrativeText text={payload.narrative} />
         </div>
 
-        {/* Chart chip — for non-table chart types */}
+        {/* Chart chip — open right Insight panel (chart + returned data tabs) */}
         {hasChart && !showTableInline && (
           <div
             className="mt-2 pt-4"
             style={{ borderTop: '1px solid rgba(255,255,255,0.06)' }}
           >
             <button
-              onClick={() =>
-                openInsight(payload.chartType!, payload.chartData!, chartLabel(payload.chartType!))
-              }
+              onClick={openThisInsight}
               className="group inline-flex items-center gap-2.5 rounded-xl px-4 py-2.5 text-sm font-medium text-white transition-all duration-200"
               style={{
                 background: 'rgba(90,78,227,0.10)',
@@ -111,6 +124,23 @@ function OutputCardImpl({ payload, onCorrectionClick }: OutputCardProps) {
             style={{ borderTop: '1px solid rgba(255,255,255,0.06)' }}
           >
             <DataTable data={payload.chartData as never} />
+            <div className="mt-4">
+              <button
+                type="button"
+                onClick={openThisInsight}
+                className="group inline-flex items-center gap-2.5 rounded-xl px-4 py-2.5 text-sm font-medium text-white transition-all duration-200"
+                style={{
+                  background: 'rgba(90,78,227,0.10)',
+                  border: '1px solid rgba(90,78,227,0.25)',
+                }}
+              >
+                <BarChart2 className="h-4 w-4 text-brand-cyan shrink-0" />
+                <span>
+                  Open in Insights <span className="text-brand-cyan font-semibold">(chart &amp; raw data)</span>
+                </span>
+                <ArrowUpRight className="h-3.5 w-3.5 text-brand-indigo-light opacity-70 transition-transform duration-150 group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
+              </button>
+            </div>
           </div>
         )}
 
@@ -123,6 +153,20 @@ function OutputCardImpl({ payload, onCorrectionClick }: OutputCardProps) {
             <CitationChips citations={payload.citationChips} />
           </div>
         )}
+
+        {payload.totalTimeMs != null &&
+          Number.isFinite(payload.totalTimeMs) &&
+          payload.totalTimeMs >= 0 && (
+            <div
+              className="mt-4 flex items-center justify-end gap-1.5 border-t pt-3"
+              style={{ borderTop: '1px solid rgba(255,255,255,0.06)' }}
+            >
+              <Timer className="h-3.5 w-3.5 shrink-0 text-slate-600" aria-hidden />
+              <span className="text-[11px] font-medium tabular-nums tracking-wide text-slate-500">
+                {formatAnswerTime(payload.totalTimeMs)}
+              </span>
+            </div>
+          )}
       </div>
 
       {/* SQL Details */}
@@ -131,6 +175,7 @@ function OutputCardImpl({ payload, onCorrectionClick }: OutputCardProps) {
           sql={payload.sql}
           secondarySql={payload.secondarySql}
           rowsReturned={payload.rowCount}
+          explanation={payload.explanation}
         />
       )}
 

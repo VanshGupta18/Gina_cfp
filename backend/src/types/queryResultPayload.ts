@@ -1,3 +1,9 @@
+/** Primary SQL result grid for the client (Insight panel). */
+export type QueryResultTable = {
+  columns: Array<{ key: string; label: string }>;
+  rows: Array<Record<string, string>>;
+};
+
 /** §9 OutputPayload / SSE `result` event (messages.output_payload JSONB). */
 export type QueryResultPayload = {
   messageId: string;
@@ -19,4 +25,12 @@ export type QueryResultPayload = {
   autoInsights: string[];
   cacheHit: boolean;
   snapshotUsed: boolean;
+  /** One-paragraph trace (SQL analytics path only). */
+  explanation: string;
+  /** Primary SELECT rows (stringified cells), same cap as db executor. */
+  resultTable: QueryResultTable | null;
+  /** True when the engine capped rows at MAX_ROWS. */
+  resultTruncated: boolean;
+  /** Wall-clock time from pipeline start until the result was ready (milliseconds). */
+  totalTimeMs: number;
 };

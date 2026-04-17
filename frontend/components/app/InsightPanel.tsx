@@ -1,8 +1,19 @@
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
-import { X, BarChart2, TrendingUp, BarChart, LineChart as LineChartIcon, Table2, Pin, PinOff } from 'lucide-react';
+import {
+  X,
+  BarChart2,
+  TrendingUp,
+  BarChart,
+  LineChart as LineChartIcon,
+  Table2,
+  Pin,
+  PinOff,
+  Database,
+} from 'lucide-react';
 import type { ChartType, ChartData, StandardChartData, BigNumberChartData } from '@/types';
+import type { InsightState } from '@/lib/providers/UIStateProvider';
 import { useUIState } from '@/lib/providers/UIStateProvider';
 
 import { BigNumberCard } from '../charts/BigNumberCard';
@@ -35,6 +46,84 @@ function chartTypeLabel(type: ChartType): string {
     case 'big_number': return 'Key Figure';
     default: return 'Visualization';
   }
+}
+
+function insightsEqual(a: InsightState, b: InsightState): boolean {
+  return (
+    a.type === b.type &&
+    a.title === b.title &&
+    JSON.stringify(a.data) === JSON.stringify(b.data) &&
+    JSON.stringify(a.resultTable ?? null) === JSON.stringify(b.resultTable ?? null) &&
+    (a.resultTruncated ?? false) === (b.resultTruncated ?? false)
+  );
+}
+
+function SqlResultTable({
+  columns,
+  rows,
+  truncated,
+}: {
+  columns: Array<{ key: string; label: string }>;
+  rows: Array<Record<string, string>>;
+  truncated?: boolean;
+}) {
+  if (columns.length === 0) {
+    return (
+      <p className="text-center text-sm text-slate-500 py-8">No columns in this result.</p>
+    );
+  }
+  return (
+    <div className="flex min-h-0 flex-1 flex-col gap-2">
+      {truncated && (
+        <p className="text-[11px] text-slate-500">
+          Showing up to 100 rows (query capped server-side).
+        </p>
+      )}
+      <div
+        className="min-h-0 flex-1 overflow-auto rounded-xl border border-white/8"
+        style={{ background: 'rgba(8,10,15,0.6)' }}
+      >
+        <table className="w-max min-w-full border-collapse text-left text-xs">
+          <thead
+            className="sticky top-0 z-10"
+            style={{
+              background: 'rgba(18,22,32,0.95)',
+              boxShadow: '0 1px 0 rgba(255,255,255,0.06)',
+            }}
+          >
+            <tr>
+              {columns.map((col) => (
+                <th
+                  key={col.key}
+                  className="whitespace-nowrap px-3 py-2.5 font-semibold text-slate-300"
+                  title={col.key}
+                >
+                  {col.label}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row, ri) => (
+              <tr
+                key={ri}
+                className="border-t border-white/[0.04] transition-colors hover:bg-white/[0.03]"
+              >
+                {columns.map((col) => (
+                  <td
+                    key={col.key}
+                    className="max-w-[min(24rem,50vw)] whitespace-pre-wrap break-words px-3 py-2 font-mono text-[11px] leading-snug text-slate-400"
+                  >
+                    {row[col.key] ?? ''}
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
 }
 
 function renderChart(type: ChartType, data: ChartData) {
@@ -94,9 +183,19 @@ export default function InsightPanel() {
 
   const insightToDisplay = activeInsight || pinnedChart;
 
-  const isCurrentPinned = insightToDisplay && pinnedChart && 
-    pinnedChart.type === insightToDisplay.type && 
-    JSON.stringify(pinnedChart.data) === JSON.stringify(insightToDisplay.data);
+  const [insightTab, setInsightTab] = useState<'chart' | 'data'>('chart');
+
+  const insightKey = insightToDisplay
+    ? `${insightToDisplay.type}-${insightToDisplay.title ?? ''}-${JSON.stringify(insightToDisplay.data)}-${JSON.stringify(insightToDisplay.resultTable ?? null)}`
+    : '';
+
+  useEffect(() => {
+    setInsightTab('chart');
+  }, [insightKey]);
+
+  const isCurrentPinned = Boolean(
+    insightToDisplay && pinnedChart && insightsEqual(pinnedChart, insightToDisplay),
+  );
 
   const togglePin = () => {
     if (isCurrentPinned) {
@@ -164,6 +263,11 @@ export default function InsightPanel() {
             <p className="truncate text-sm font-semibold text-slate-200">
               {insightToDisplay?.title ?? (insightToDisplay ? chartTypeLabel(insightToDisplay.type) : 'No insight')}
             </p>
+            {insightToDisplay?.explanation ? (
+              <p className="mt-1 line-clamp-3 text-[11px] leading-relaxed text-slate-500">
+                {insightToDisplay.explanation}
+              </p>
+            ) : null}
           </div>
           {insightToDisplay && (
             <button
@@ -188,37 +292,78 @@ export default function InsightPanel() {
         </div>
 
         {/* Body */}
-        <div className="flex min-h-0 flex-1 flex-col overflow-y-auto p-5">
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden p-5">
           {insightToDisplay ? (
-            <div className="animate-fade-in">
-              {/* Chart type badge */}
-              <div className="mb-5 flex items-center gap-2">
-                <span
-                  className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-widest"
-                  style={{
-                    background: 'rgba(60,224,214,0.08)',
-                    border: '1px solid rgba(60,224,214,0.18)',
-                    color: 'rgba(60,224,214,0.9)',
-                  }}
+            <div className="animate-fade-in flex min-h-0 flex-1 flex-col">
+              <div className="mb-4 flex gap-1 rounded-lg p-0.5" style={{ background: 'rgba(255,255,255,0.04)' }}>
+                <button
+                  type="button"
+                  onClick={() => setInsightTab('chart')}
+                  className={`flex flex-1 items-center justify-center gap-1.5 rounded-md px-3 py-2 text-xs font-semibold transition-colors ${
+                    insightTab === 'chart'
+                      ? 'bg-white/10 text-white shadow-sm'
+                      : 'text-slate-500 hover:text-slate-300'
+                  }`}
                 >
                   <ChartTypeIcon type={insightToDisplay.type} />
-                  {chartTypeLabel(insightToDisplay.type)}
-                </span>
+                  Chart
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setInsightTab('data')}
+                  className={`flex flex-1 items-center justify-center gap-1.5 rounded-md px-3 py-2 text-xs font-semibold transition-colors ${
+                    insightTab === 'data'
+                      ? 'bg-white/10 text-white shadow-sm'
+                      : 'text-slate-500 hover:text-slate-300'
+                  }`}
+                >
+                  <Database className="h-3.5 w-3.5" />
+                  Returned data
+                </button>
               </div>
 
-              {/* Chart surface */}
-              <div
-                className="overflow-hidden rounded-xl p-4"
-                style={{
-                  background: 'rgba(18,22,32,0.8)',
-                  border: '1px solid rgba(255,255,255,0.07)',
-                }}
-              >
-                {renderChart(insightToDisplay.type, insightToDisplay.data)}
-              </div>
+              {insightTab === 'chart' ? (
+                <>
+                  <div className="mb-4 flex items-center gap-2">
+                    <span
+                      className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-widest"
+                      style={{
+                        background: 'rgba(60,224,214,0.08)',
+                        border: '1px solid rgba(60,224,214,0.18)',
+                        color: 'rgba(60,224,214,0.9)',
+                      }}
+                    >
+                      <ChartTypeIcon type={insightToDisplay.type} />
+                      {chartTypeLabel(insightToDisplay.type)}
+                    </span>
+                  </div>
+                  <div
+                    className="min-h-0 flex-1 overflow-auto rounded-xl p-4"
+                    style={{
+                      background: 'rgba(18,22,32,0.8)',
+                      border: '1px solid rgba(255,255,255,0.07)',
+                    }}
+                  >
+                    {renderChart(insightToDisplay.type, insightToDisplay.data)}
+                  </div>
+                </>
+              ) : insightToDisplay.resultTable &&
+                insightToDisplay.resultTable.columns.length > 0 ? (
+                <SqlResultTable
+                  columns={insightToDisplay.resultTable.columns}
+                  rows={insightToDisplay.resultTable.rows}
+                  truncated={insightToDisplay.resultTruncated}
+                />
+              ) : (
+                <div className="flex flex-1 flex-col items-center justify-center gap-2 rounded-xl border border-white/8 bg-[rgba(18,22,32,0.5)] p-8 text-center">
+                  <Table2 className="h-8 w-8 text-slate-600" />
+                  <p className="text-sm text-slate-500">No raw query rows for this answer.</p>
+                  <p className="text-xs text-slate-600">Conversational replies and cache-only answers do not attach a result grid.</p>
+                </div>
+              )}
 
               {!isCurrentPinned && (
-                <p className="mt-5 text-xs text-white/20 text-center">
+                <p className="mt-4 shrink-0 text-xs text-white/20 text-center">
                   Click a chart chip in the conversation to update this panel.
                 </p>
               )}

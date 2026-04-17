@@ -26,6 +26,10 @@ const samplePayload = (narrative: string): QueryResultPayload => ({
   autoInsights: [],
   cacheHit: false,
   snapshotUsed: false,
+  explanation: '',
+  resultTable: null,
+  resultTruncated: false,
+  totalTimeMs: 0,
 });
 
 (hasDb ? test : test.skip)('concurrent response_cache upserts do not throw', async () => {

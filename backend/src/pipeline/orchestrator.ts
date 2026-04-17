@@ -20,7 +20,12 @@ import { validateSql } from './sqlValidator.js';
 import { executeReadOnlySql, type ResultRow } from './dbExecutor.js';
 import { runSecondaryQuery } from './secondaryQuery.js';
 import { detectAutoInsights, computeConfidence, selectChartType, type ChartType } from './autoInsight.js';
-import { generateNarration } from './narrator.js';
+import {
+  emptyResultExplanation,
+  generateExplanation,
+  generateNarration,
+} from './narrator.js';
+import { buildResultTable } from './resultTableSerialize.js';
 import { getSnapshotMode } from '../snapshots/snapshotMode.js';
 import {
   defaultSimulatedSteps,
@@ -67,6 +72,18 @@ async function sendResult(reply: FastifyReply, payload: QueryResultPayload): Pro
 
 async function sendError(reply: FastifyReply, message: string, recoverable: boolean): Promise<void> {
   await reply.sse.send({ event: 'error', data: { message, recoverable } });
+}
+
+/** Business labels for planner-chosen fields (plain-language “how we answered” text). */
+function columnLabelsForExplanation(
+  relevantNames: string[],
+  schemaColumns: ColumnProfile[],
+): string[] {
+  return relevantNames.map((name) => {
+    const c = schemaColumns.find((x) => x.columnName === name);
+    const label = c?.businessLabel?.trim();
+    return label && label.length > 0 ? label : name;
+  });
 }
 
 // ─── Chart data helpers ───────────────────────────────────────────────────────
@@ -366,6 +383,10 @@ export async function runQueryOrchestration(input: QueryOrchestrationInput): Pro
         messageId: randomUUID(),
         snapshotUsed: true,
         cacheHit: false,
+        explanation: snap.outputPayload.explanation ?? '',
+        resultTable: snap.outputPayload.resultTable ?? null,
+        resultTruncated: snap.outputPayload.resultTruncated ?? false,
+        totalTimeMs: Date.now() - t0,
       };
       await sendResult(reply, out);
       reply.sse.close();
@@ -405,6 +426,10 @@ export async function runQueryOrchestration(input: QueryOrchestrationInput): Pro
       ...cached.payload,
       messageId: randomUUID(),
       cacheHit: true,
+      explanation: cached.payload.explanation ?? '',
+      resultTable: cached.payload.resultTable ?? null,
+      resultTruncated: cached.payload.resultTruncated ?? false,
+      totalTimeMs: Date.now() - t0,
     };
     await sendResult(reply, out);
     reply.sse.close();
@@ -496,6 +521,10 @@ export async function runQueryOrchestration(input: QueryOrchestrationInput): Pro
         autoInsights: [],
         cacheHit: false,
         snapshotUsed: false,
+        explanation: '',
+        resultTable: null,
+        resultTruncated: false,
+        totalTimeMs: Date.now() - t0,
       };
       await sendResult(reply, conversationalPayload);
       reply.sse.close();
@@ -548,6 +577,10 @@ export async function runQueryOrchestration(input: QueryOrchestrationInput): Pro
         autoInsights: [],
         cacheHit: true,
         snapshotUsed: false,
+        explanation: '',
+        resultTable: null,
+        resultTruncated: false,
+        totalTimeMs: Date.now() - t0,
       };
       await sendResult(reply, followUpPayload);
       reply.sse.close();
@@ -639,6 +672,7 @@ export async function runQueryOrchestration(input: QueryOrchestrationInput): Pro
     tel.latencyDbMs = Date.now() - tDbStart;
     const rows = exec.rows;
     tel.rowsReturned = rows.length;
+    const resultTable = buildResultTable(rows, columns, plan.relevantColumns);
 
     await sendStep(reply, {
       step: 'db_execution',
@@ -721,6 +755,27 @@ export async function runQueryOrchestration(input: QueryOrchestrationInput): Pro
     }
     await sendStep(reply, { step: 'narration', status: 'complete', detail: 'Done' });
 
+    const explanationLabels = columnLabelsForExplanation(plan.relevantColumns, columns);
+
+    let explanation = '';
+    if (rows.length === 0) {
+      explanation = emptyResultExplanation({
+        question,
+        relevantColumns: plan.relevantColumns,
+        columnLabels: explanationLabels,
+      });
+    } else if (!narrationCacheHit) {
+      explanation = await generateExplanation({
+        question,
+        understandingCard: understandingCard ?? '',
+        relevantColumns: plan.relevantColumns,
+        columnLabels: explanationLabels,
+        narrative,
+        primaryRows: rows,
+        sql: gen.sql,
+      });
+    }
+
     // ── Person A: output payload assembly ──
     const chartData = buildChartData(rows, chartType);
     const keyFigure = extractKeyFigure(rows, chartType);
@@ -743,6 +798,10 @@ export async function runQueryOrchestration(input: QueryOrchestrationInput): Pro
       autoInsights,
       cacheHit: false,
       snapshotUsed: false,
+      explanation,
+      resultTable,
+      resultTruncated: exec.truncated,
+      totalTimeMs: Date.now() - t0,
     };
 
     await sendResult(reply, outputPayload);

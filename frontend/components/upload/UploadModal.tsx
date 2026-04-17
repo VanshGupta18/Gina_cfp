@@ -2,7 +2,7 @@
 
 import React, { useState, useRef, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import { runPIIShield } from '@/lib/pii/shield';
+import { prepareIngestionFromFile, type IngestionPayloadV1 } from '@/lib/pii/prepareIngestion';
 import { uploadDataset } from '@/lib/api/datasets';
 import { createConversation } from '@/lib/api/conversations';
 import { useDatasets } from '@/lib/hooks/useDatasets';
@@ -28,7 +28,8 @@ export default function UploadModal({ onClose }: UploadModalProps) {
   // Custom states for steps (01 Intake, 02 Risk, 03 Mapping)
   const [step, setStep] = useState<1 | 2 | 3>(1);
   const [redactedColumns, setRedactedColumns] = useState<string[]>([]);
-  const [redactedFileMemo, setRedactedFileMemo] = useState<File | null>(null);
+  const [ingestionMemo, setIngestionMemo] = useState<IngestionPayloadV1 | null>(null);
+  const [originalFileMemo, setOriginalFileMemo] = useState<File | null>(null);
   const [understandingCard, setUnderstandingCard] = useState<string | null>(null);
   const [uploadedDatasetId, setUploadedDatasetId] = useState<string | null>(null);
   const [correctionModalOpen, setCorrectionModalOpen] = useState(false);
@@ -46,10 +47,33 @@ export default function UploadModal({ onClose }: UploadModalProps) {
       return `${parseFloat((bytes / Math.pow(k, i)).toFixed(dm))} ${sizes[i]}`;
   }
 
+  const performUpload = useCallback(
+    async (originalFile: File, ingestion: IngestionPayloadV1) => {
+      setIsProcessing(true);
+      setError(null);
+      try {
+        const result = await uploadDataset(originalFile, ingestion);
+
+        setUnderstandingCard(result.understandingCard);
+        setUploadedDatasetId(result.dataset.id);
+
+        setStep(3);
+        await refreshDatasets();
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : 'Upload failed. Please try again.';
+        setError(message);
+      } finally {
+        setIsProcessing(false);
+      }
+    },
+    [refreshDatasets],
+  );
+
   const handleProcessFile = useCallback(
     async (file: File) => {
-      if (!file.name.toLowerCase().endsWith('.csv')) {
-        setError('Please upload a .csv file');
+      const lower = file.name.toLowerCase();
+      if (!lower.endsWith('.csv') && !lower.endsWith('.xlsx') && !lower.endsWith('.xls')) {
+        setError('Please upload a .csv, .xlsx, or .xls file');
         return;
       }
       if (file.size > 50 * 1024 * 1024) {
@@ -63,48 +87,26 @@ export default function UploadModal({ onClose }: UploadModalProps) {
       setRedactedColumns([]);
       setUploadedDatasetId(null);
       setCorrectionModalOpen(false);
+      setIngestionMemo(null);
+      setOriginalFileMemo(null);
 
       try {
-        // Step 1 done -> Move to Step 2 (Risk Mitigation view implicitly inside processing)
-        const { redactedFile, redactedColumns: cols } = await runPIIShield(file);
-        setRedactedColumns(cols);
-        setRedactedFileMemo(redactedFile);
-        
-        // Show step 2 for at least a beat
+        const ingestion = await prepareIngestionFromFile(file);
+        setRedactedColumns(ingestion.piiSummary.redactedColumns);
+        setIngestionMemo(ingestion);
+        setOriginalFileMemo(file);
         setStep(2);
 
-        // Upload and get understanding
-        await performUpload(redactedFile);
+        await performUpload(file, ingestion);
       } catch (err: unknown) {
         const message = err instanceof Error ? err.message : 'Failed to process and upload dataset';
         setError(message);
-        setStep(1); // processing failed early, go back to 1
+        setStep(1);
         setIsProcessing(false);
       }
     },
-    [refreshDatasets],
+    [performUpload],
   );
-
-  const performUpload = async (fileToUpload: File) => {
-      setIsProcessing(true);
-      setError(null);
-      try {
-        const result = await uploadDataset(fileToUpload);
-
-        setUnderstandingCard(result.understandingCard);
-        setUploadedDatasetId(result.dataset.id);
-        
-        // Step 3 (Intelligence Mapping)
-        setStep(3);
-        await refreshDatasets();
-      } catch (err: unknown) {
-        const message = err instanceof Error ? err.message : 'Upload failed. Please try again.';
-        setError(message);
-        // Do NOT go back to step 1. Stay on step 2 so they can retry.
-      } finally {
-        setIsProcessing(false);
-      }
-  };
 
   const handleStartAsking = async () => {
     if (!uploadedDatasetId) return;
@@ -222,7 +224,7 @@ export default function UploadModal({ onClose }: UploadModalProps) {
             >
               <input
                 type="file"
-                accept=".csv"
+                accept=".csv,.xlsx,.xls"
                 className="hidden"
                 ref={fileInputRef}
                 onChange={onFileChange}
@@ -239,12 +241,12 @@ export default function UploadModal({ onClose }: UploadModalProps) {
               </div>
 
               <h3 className="text-base font-semibold text-slate-200 mb-1">
-                Drop your CSV file here
+                Drop your spreadsheet here
               </h3>
               <div className="text-sm text-slate-500 mb-3 inline-flex items-center gap-1">
                 or <span className="text-brand-indigo-light font-medium">click to browse</span>
               </div>
-              <p className="text-xs text-slate-600">.csv only · max 50MB</p>
+              <p className="text-xs text-slate-600">.csv, .xlsx, .xls · max 50MB</p>
             </div>
 
             <div
@@ -275,8 +277,8 @@ export default function UploadModal({ onClose }: UploadModalProps) {
 
             <div className="border border-emerald-500/30 border-dashed rounded-xl p-6 bg-emerald-500/[0.02] flex items-center justify-between">
               <div className="flex items-center gap-4">
-                <div className="w-12 h-12 rounded-lg bg-emerald-500/10 flex items-center justify-center text-emerald-400 font-bold text-xs font-mono uppercase border border-emerald-500/20">
-                  CSV
+                <div className="w-12 h-12 rounded-lg bg-emerald-500/10 flex items-center justify-center text-emerald-400 font-bold text-[10px] font-mono uppercase border border-emerald-500/20 px-1 text-center leading-tight">
+                  {fileDetails?.name?.toLowerCase().endsWith('.csv') ? 'CSV' : 'XLS'}
                 </div>
                 <div className="flex flex-col gap-1">
                   <span className="text-base font-bold text-white">{fileDetails?.name || 'dataset.csv'}</span>
@@ -310,9 +312,13 @@ export default function UploadModal({ onClose }: UploadModalProps) {
                   Processing <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"/>
                 </Button>
               ) : (
-                <Button 
+                <Button
                   variant="danger"
-                  onClick={() => redactedFileMemo && performUpload(redactedFileMemo)}
+                  onClick={() => {
+                    if (originalFileMemo && ingestionMemo) {
+                      void performUpload(originalFileMemo, ingestionMemo);
+                    }
+                  }}
                   className="gap-2"
                 >
                   <RotateCcw className="w-4 h-4" /> Retry Upload

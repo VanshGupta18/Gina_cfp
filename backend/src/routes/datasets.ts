@@ -1,7 +1,14 @@
-import { randomUUID } from 'crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { bufferToCsvText, parseCSV } from '../utils/csvParser.js';
+import type { ParsedCSV } from '../utils/csvParser.js';
+import { parseIngestionPayloadJson, type IngestionPayload } from '../utils/uploadIngestion.js';
+import {
+  ensureUniqueDatasetDisplayName,
+  displayNameForSheet,
+  sanitizeFilenameForDisplay,
+} from '../utils/datasetNaming.js';
 import { uploadToS3 } from '../utils/s3.js';
 import { profileColumns, coerceValue } from '../semantic/profiler.js';
 import type { ColumnProfile } from '../semantic/profiler.js';
@@ -50,12 +57,55 @@ const CSV_MIMETYPES = new Set([
   'application/octet-stream',
 ]);
 
+const EXCEL_MIMETYPES = new Set([
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  'application/vnd.ms-excel',
+]);
+
+function isExcelFilename(name: string): boolean {
+  const lower = name.toLowerCase();
+  return lower.endsWith('.xlsx') || lower.endsWith('.xls');
+}
+
+function isCsvFilename(name: string): boolean {
+  return name.toLowerCase().endsWith('.csv');
+}
+
+function guessS3ContentType(name: string): string {
+  const lower = name.toLowerCase();
+  if (lower.endsWith('.xlsx')) {
+    return 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+  }
+  if (lower.endsWith('.xls')) {
+    return 'application/vnd.ms-excel';
+  }
+  return 'text/csv';
+}
+
+function acceptsUploadedFile(filename: string, mimetype: string): boolean {
+  const mt = mimetype.toLowerCase();
+  if (isCsvFilename(filename) || CSV_MIMETYPES.has(mt)) return true;
+  if (isExcelFilename(filename) || EXCEL_MIMETYPES.has(mt)) return true;
+  return false;
+}
+
 /**
  * Sanitize a column name so it is safe to use as a double-quoted PostgreSQL identifier.
  * Double-quotes inside the name are stripped by the profiler; this just adds the wrapping.
  */
 function quotedIdent(name: string): string {
   return `"${name}"`;
+}
+
+/** Dynamic dataset tables are created as `dataset_*` identifiers we control (upload + seed). */
+function isSafeDatasetTableName(name: string): boolean {
+  return /^dataset_[a-zA-Z0-9_]+$/.test(name);
+}
+
+function formatPreviewCell(value: unknown): string {
+  if (value === null || value === undefined) return '';
+  if (value instanceof Date) return value.toISOString().slice(0, 10);
+  return String(value);
 }
 
 /**
@@ -165,6 +215,89 @@ export default async function datasetsRoutes(fastify: FastifyInstance) {
       };
     },
   );
+
+  // GET /api/datasets/:datasetId/preview — paginated tabular rows for the native sheet viewer
+  fastify.get<{
+    Params: { datasetId: string };
+    Querystring: { limit?: string; offset?: string };
+  }>('/datasets/:datasetId/preview', async (request, reply) => {
+    const { datasetId } = request.params;
+    const limitRaw = request.query.limit;
+    const offsetRaw = request.query.offset;
+    const limit = Math.min(500, Math.max(1, Number.parseInt(limitRaw ?? '100', 10) || 100));
+    const offset = Math.max(0, Number.parseInt(offsetRaw ?? '0', 10) || 0);
+
+    const { rows: dsRows } = await fastify.db.query<{
+      data_table_name: string;
+      row_count: number | null;
+    }>(
+      `SELECT data_table_name, row_count
+       FROM datasets
+       WHERE id = $1::uuid AND (user_id = $2 OR is_demo = true)`,
+      [datasetId, request.userId],
+    );
+
+    if (dsRows.length === 0) {
+      return reply.status(404).send({ error: 'Dataset not found' });
+    }
+
+    const tableName = dsRows[0]!.data_table_name;
+    const totalRows = dsRows[0]!.row_count ?? 0;
+
+    if (!isSafeDatasetTableName(tableName)) {
+      fastify.log.error({ datasetId, tableName }, 'Invalid data_table_name');
+      return reply.status(500).send({ error: 'Invalid dataset storage configuration' });
+    }
+
+    const { rows: semRows } = await fastify.db.query<{ schema_json: unknown }>(
+      `SELECT schema_json FROM semantic_states WHERE dataset_id = $1::uuid`,
+      [datasetId],
+    );
+
+    if (semRows.length === 0) {
+      return reply.status(404).send({ error: 'Semantic state not found' });
+    }
+
+    const rawSchema = semRows[0]!.schema_json as StoredSchemaJson | null;
+    if (!rawSchema?.columns?.length) {
+      return reply.status(500).send({ error: 'Dataset schema unavailable' });
+    }
+
+    if (rawSchema.tableName !== tableName) {
+      fastify.log.warn(
+        { datasetId, data_table_name: tableName, schema_table: rawSchema.tableName },
+        'schema_json.tableName mismatch; using datasets.data_table_name',
+      );
+    }
+
+    const columns = rawSchema.columns.map((c) => ({
+      key: c.columnName,
+      label: c.businessLabel || c.columnName,
+    }));
+
+    const quotedCols = rawSchema.columns.map((c) => quotedIdent(c.columnName)).join(', ');
+
+    const { rows: dataRows } = await fastify.db.query<Record<string, unknown>>(
+      `SELECT ${quotedCols} FROM ${quotedIdent(tableName)} ORDER BY ${quotedIdent('_row_id')} ASC LIMIT $1 OFFSET $2`,
+      [limit, offset],
+    );
+
+    const rows = dataRows.map((row) => {
+      const out: Record<string, string> = {};
+      for (const c of rawSchema.columns) {
+        out[c.columnName] = formatPreviewCell(row[c.columnName]);
+      }
+      return out;
+    });
+
+    return {
+      columns,
+      rows,
+      totalRows,
+      limit,
+      offset,
+    };
+  });
 
   // GET /api/datasets/:datasetId/semantic — get semantic state for a dataset
   fastify.get<{ Params: { datasetId: string } }>(
@@ -349,7 +482,7 @@ export default async function datasetsRoutes(fastify: FastifyInstance) {
   });
 
   // ── POST /api/datasets/upload ──────────────────────────────────────────────
-  // multipart → parse → profile → enrich + embed → S3 → dynamic table → datasets + semantic + embeddings
+  // multipart: field `file` = original bytes (S3 + hash); optional field `ingestion` = JSON with redacted CSV per sheet
   fastify.post('/datasets/upload', async (request, reply) => {
     type FilePart = {
       file: AsyncIterable<Buffer | Uint8Array>;
@@ -370,30 +503,54 @@ export default async function datasetsRoutes(fastify: FastifyInstance) {
       return Buffer.from(Buffer.concat(chunks));
     }
 
-    // 1. Prefer iterating file parts: some clients send an empty first part; skip until non-empty buffer.
     let fileBuffer: Buffer | undefined;
     let filename = 'upload.csv';
     let mimetype = 'text/csv';
+    let ingestionRaw: string | undefined;
+
+    try {
+      for await (const part of request.parts()) {
+        if (part.type === 'file') {
+          if (part.fieldname !== 'file') continue;
+          const buf = await part.toBuffer();
+          if (buf.length === 0) continue;
+          fileBuffer = buf;
+          filename = part.filename ?? 'upload.csv';
+          mimetype = part.mimetype ?? 'text/csv';
+        } else if (part.type === 'field' && part.fieldname === 'ingestion') {
+          ingestionRaw =
+            typeof part.value === 'string' ? part.value : String(part.value ?? '');
+        }
+      }
+    } catch (e: unknown) {
+      const err = e as { code?: string; statusCode?: number };
+      if (err.code === 'FST_REQ_FILE_TOO_LARGE' || err.statusCode === 413) {
+        return reply.status(413).send({ error: 'File exceeds the 50 MB limit' });
+      }
+      throw e;
+    }
 
     const multipartReq = request as typeof request & {
       files?: () => AsyncIterable<FilePart>;
       file: () => Promise<FilePart | undefined>;
     };
 
-    if (typeof multipartReq.files === 'function') {
-      for await (const part of multipartReq.files()) {
-        const buf = await readPartToBuffer(part).catch((e) => {
-          if (e instanceof Error && e.message === 'FILE_TOO_LARGE') return null;
-          throw e;
-        });
-        if (buf === null) {
-          return reply.status(413).send({ error: 'File exceeds the 50 MB limit' });
+    if (fileBuffer === undefined || fileBuffer.length === 0) {
+      if (typeof multipartReq.files === 'function') {
+        for await (const part of multipartReq.files()) {
+          const buf = await readPartToBuffer(part).catch((e) => {
+            if (e instanceof Error && e.message === 'FILE_TOO_LARGE') return null;
+            throw e;
+          });
+          if (buf === null) {
+            return reply.status(413).send({ error: 'File exceeds the 50 MB limit' });
+          }
+          if (buf.length === 0) continue;
+          fileBuffer = buf;
+          filename = part.filename ?? 'upload.csv';
+          mimetype = part.mimetype ?? 'text/csv';
+          break;
         }
-        if (buf.length === 0) continue;
-        fileBuffer = buf;
-        filename = part.filename ?? 'upload.csv';
-        mimetype = part.mimetype ?? 'text/csv';
-        break;
       }
     }
 
@@ -416,167 +573,279 @@ export default async function datasetsRoutes(fastify: FastifyInstance) {
 
     if (fileBuffer === undefined || fileBuffer.length === 0) {
       return reply.status(400).send({
-        error: 'CSV has no headers',
+        error: 'File is empty',
         hint:
-          'The uploaded file body was empty. Use multipart field name "file", ensure the CSV is not 0 bytes, and on OneDrive/Google Drive use "Available offline" / download a real file before uploading.',
+          'Use multipart field name "file". Ensure the file is not 0 bytes, and on OneDrive/Google Drive use "Available offline" before uploading.',
       });
     }
 
-    // Reject non-CSV by extension and MIME type
-    const isCSVExtension = filename.toLowerCase().endsWith('.csv');
-    const isCSVMime = CSV_MIMETYPES.has(mimetype.toLowerCase());
-    if (!isCSVExtension && !isCSVMime) {
-      return reply.status(400).send({ error: 'Only CSV files are accepted' });
-    }
-
-    // 2. Parse CSV (UTF-8 / UTF-16 / BOM)
-    const csvText = bufferToCsvText(fileBuffer);
-    const parsed = parseCSV(csvText);
-
-    if (parsed.headers.length === 0) {
+    if (!acceptsUploadedFile(filename, mimetype)) {
       return reply.status(400).send({
-        error: 'CSV has no headers',
-        hint:
-          'The first row must be comma-separated column names. If you exported from Excel, choose "CSV UTF-8 (Comma delimited)" or ensure the file is not UTF-16 misread.',
+        error: 'Unsupported file type',
+        hint: 'Use .csv, .xlsx, or .xls',
       });
     }
-    if (parsed.rows.length === 0) {
-      return reply.status(400).send({ error: 'CSV has no data rows' });
+
+    const contentHash = createHash('sha256').update(fileBuffer).digest('hex');
+
+    const dup = await fastify.db.query<{ exists: boolean }>(
+      `SELECT EXISTS (
+         SELECT 1 FROM datasets
+         WHERE user_id = $1::uuid AND content_hash = $2 AND is_demo = false
+       ) AS exists`,
+      [request.userId, contentHash],
+    );
+    if (dup.rows[0]?.exists) {
+      return reply.status(409).send({
+        error: 'This file was already uploaded',
+        code: 'DUPLICATE_DATASET',
+      });
     }
 
-    // 4. Profile columns (type detection, null rates, samples, ranges)
-    const profiles = profileColumns(parsed);
+    let ingestion: IngestionPayload | undefined;
+    if (ingestionRaw !== undefined && ingestionRaw.trim() !== '') {
+      try {
+        ingestion = parseIngestionPayloadJson(ingestionRaw);
+      } catch (e) {
+        if (e instanceof z.ZodError) {
+          return reply.status(400).send({ error: 'Invalid ingestion payload', details: e.flatten() });
+        }
+        return reply.status(400).send({
+          error: 'Invalid ingestion JSON',
+          message: e instanceof Error ? e.message : String(e),
+        });
+      }
+    }
 
-    // 5. Generate IDs
-    const datasetId = randomUUID();
-    const tableName = `dataset_${datasetId.replace(/-/g, '')}`;
-    const s3Key = `uploads/${request.userId}/${datasetId}/${filename}`;
+    if (isExcelFilename(filename) && !ingestion) {
+      return reply.status(400).send({
+        error: 'Excel uploads require an ingestion payload from the app',
+        hint: 'Multipart field "ingestion" must contain JSON with version 1 and a sheets array.',
+      });
+    }
 
-    // 6. Upload to S3 (before DB — orphaned S3 objects are acceptable)
+    type SheetIn = { sheetName: string; csv: string };
+    let sheetsIn: SheetIn[] = [];
+
+    if (ingestion && ingestion.sheets.length > 0) {
+      sheetsIn = ingestion.sheets;
+    } else if (!ingestion && isCsvFilename(filename)) {
+      const csvText = bufferToCsvText(fileBuffer);
+      const parsedProbe = parseCSV(csvText);
+      if (parsedProbe.headers.length === 0) {
+        return reply.status(400).send({
+          error: 'CSV has no headers',
+          hint:
+            'The first row must be comma-separated column names. If you exported from Excel, choose "CSV UTF-8 (Comma delimited)".',
+        });
+      }
+      if (parsedProbe.rows.length === 0) {
+        return reply.status(400).send({ error: 'CSV has no data rows' });
+      }
+      sheetsIn = [{ sheetName: '_', csv: csvText }];
+    } else {
+      return reply.status(400).send({
+        error: 'Missing or invalid ingestion',
+        hint:
+          'Send multipart field "ingestion" (JSON) with redacted CSV per sheet, or upload a plain .csv without ingestion.',
+      });
+    }
+
+    type SheetPlan = {
+      displayName: string;
+      sheetName: string;
+      parsed: ParsedCSV;
+      profiles: ColumnProfile[];
+      enrichedColumns: ColumnProfile[];
+      understandingCard: string;
+      embedRows: {
+        columnName: string;
+        embeddingText: string;
+        embedding: number[];
+      }[];
+    };
+
+    const sheetPlans: SheetPlan[] = [];
+
+    for (const s of sheetsIn) {
+      const baseDisplay = displayNameForSheet(filename, s.sheetName === '_' ? null : s.sheetName);
+      const parsed = parseCSV(s.csv);
+      if (parsed.headers.length === 0) {
+        return reply.status(400).send({
+          error: `Sheet "${s.sheetName}" has no headers`,
+        });
+      }
+      if (parsed.rows.length === 0) {
+        return reply.status(400).send({ error: `Sheet "${s.sheetName}" has no data rows` });
+      }
+      const profiles = profileColumns(parsed);
+      let enrichedColumns: ColumnProfile[];
+      let understandingCard: string;
+      let embeddingVectors: number[][];
+      try {
+        const enrichInput = profiles.map(profilerToEnricherInput);
+        const enriched = await enrichProfilerColumns(enrichInput);
+        enrichedColumns = mergeAllProfilerColumns(profiles, enriched);
+        understandingCard = await generateUnderstandingCard(enrichedColumns, baseDisplay);
+        const texts = enrichedColumns.map((col) => buildColumnEmbeddingText(col));
+        embeddingVectors = await embedTextsBatched(texts);
+        if (embeddingVectors.length !== enrichedColumns.length) {
+          throw new Error('Embedding batch size mismatch');
+        }
+      } catch (err) {
+        fastify.log.error({ err }, 'Semantic enrichment / embedding failed');
+        return reply.status(502).send({
+          error: 'Semantic enrichment failed',
+          message: err instanceof Error ? err.message : String(err),
+        });
+      }
+      const embedRows = enrichedColumns.map((col, i) => ({
+        columnName: col.columnName,
+        embeddingText: buildColumnEmbeddingText(col),
+        embedding: embeddingVectors[i]!,
+      }));
+      sheetPlans.push({
+        displayName: baseDisplay,
+        sheetName: s.sheetName,
+        parsed,
+        profiles,
+        enrichedColumns,
+        understandingCard,
+        embedRows,
+      });
+    }
+
+    const uploadBatchId = randomUUID();
+    const safeOriginalName = sanitizeFilenameForDisplay(filename);
+    const s3Key = `uploads/${request.userId}/${uploadBatchId}/${safeOriginalName}`;
+
     try {
-      await uploadToS3(fastify.s3, s3Key, fileBuffer);
+      await uploadToS3(fastify.s3, s3Key, fileBuffer, guessS3ContentType(filename));
     } catch (err) {
       fastify.log.error({ err }, 'S3 upload failed');
       return reply.status(502).send({ error: 'File storage unavailable' });
     }
 
-    // 7. Groq enrichment + HF embeddings (Phase 2C) — run before DDL so failed LLM calls leave no DB artifacts
-    let enrichedColumns: ColumnProfile[];
-    let understandingCard: string;
-    let embeddingVectors: number[][];
-    try {
-      const enrichInput = profiles.map(profilerToEnricherInput);
-      const enriched = await enrichProfilerColumns(enrichInput);
-      enrichedColumns = mergeAllProfilerColumns(profiles, enriched);
-      understandingCard = await generateUnderstandingCard(enriched, filename);
-      const texts = enrichedColumns.map((col) => buildColumnEmbeddingText(col));
-      embeddingVectors = await embedTextsBatched(texts);
-      if (embeddingVectors.length !== enrichedColumns.length) {
-        throw new Error('Embedding batch size mismatch');
-      }
-    } catch (err) {
-      fastify.log.error({ err }, 'Semantic enrichment / embedding failed');
-      return reply.status(502).send({
-        error: 'Semantic enrichment failed',
-        message: err instanceof Error ? err.message : String(err),
-      });
+    const { rows: nameRows } = await fastify.db.query<{ name: string }>(
+      `SELECT name FROM datasets WHERE user_id = $1::uuid AND is_demo = false`,
+      [request.userId],
+    );
+    const takenNames = new Set(nameRows.map((r) => r.name));
+    for (const plan of sheetPlans) {
+      plan.displayName = ensureUniqueDatasetDisplayName(plan.displayName, takenNames);
     }
 
-    const embedRows = enrichedColumns.map((col, i) => ({
-      columnName: col.columnName,
-      embeddingText: buildColumnEmbeddingText(col),
-      embedding: embeddingVectors[i]!,
-    }));
+    const piiSummaryOut = ingestion?.piiSummary ?? { redactedColumns: [] as string[], totalRedactions: 0 };
 
-    const schemaJson: StoredSchemaJson = {
-      tableName,
-      columns: enrichedColumns,
-      understandingCard,
-    };
-
-    // 8. DB transaction: CREATE dynamic table + bulk INSERT + datasets + semantic_states + schema_embeddings
     const client = await fastify.db.connect();
+    type ResultRow = {
+      dataset: {
+        id: string;
+        name: string;
+        rowCount: number;
+        columnCount: number;
+        isDemo: boolean;
+        createdAt: string;
+      };
+      semanticState: {
+        id: string;
+        datasetId: string;
+        schemaJson: StoredSchemaJson;
+        understandingCard: string;
+        isUserCorrected: boolean;
+        updatedAt: string;
+      };
+      understandingCard: string;
+    };
+    const outResults: ResultRow[] = [];
+
     try {
       await client.query('BEGIN');
 
-      const columnDDL = profiles
-        .map((p) => `${quotedIdent(p.columnName)} ${p.postgresType}`)
-        .join(',\n  ');
-
-      await client.query(`
-        CREATE TABLE "${tableName}" (
-          _row_id SERIAL PRIMARY KEY,
-          ${columnDDL}
-        )
-      `);
-
-      await client.query(`GRANT SELECT ON "${tableName}" TO readonly_agent`);
-
-      await bulkInsertRows(client, tableName, profiles, parsed.rows);
-
-      const datasetResult = await client.query<{
-        id: string;
-        name: string;
-        row_count: number;
-        column_count: number;
-        is_demo: boolean;
-        created_at: string;
-      }>(
-        `INSERT INTO datasets
-           (id, user_id, name, s3_key, row_count, column_count, is_demo, data_table_name)
-         VALUES ($1, $2, $3, $4, $5, $6, false, $7)
-         RETURNING id, name, row_count, column_count, is_demo, created_at`,
-        [
-          datasetId,
-          request.userId,
-          filename,
-          s3Key,
-          parsed.rows.length,
-          profiles.length,
+      for (const plan of sheetPlans) {
+        const datasetId = randomUUID();
+        const tableName = `dataset_${datasetId.replace(/-/g, '')}`;
+        const schemaJson: StoredSchemaJson = {
           tableName,
-        ],
-      );
+          columns: plan.enrichedColumns,
+          understandingCard: plan.understandingCard,
+        };
 
-      const semanticResult = await client.query<{
-        id: string;
-        updated_at: string;
-      }>(
-        `INSERT INTO semantic_states (dataset_id, schema_json, understanding_card)
-         VALUES ($1, $2::jsonb, $3)
-         RETURNING id, updated_at`,
-        [datasetId, JSON.stringify(schemaJson), understandingCard],
-      );
+        const columnDDL = plan.profiles
+          .map((p) => `${quotedIdent(p.columnName)} ${p.postgresType}`)
+          .join(',\n  ');
 
-      await insertSchemaEmbeddings(client, datasetId, embedRows);
+        await client.query(`
+          CREATE TABLE "${tableName}" (
+            _row_id SERIAL PRIMARY KEY,
+            ${columnDDL}
+          )
+        `);
+
+        await client.query(`GRANT SELECT ON "${tableName}" TO readonly_agent`);
+
+        await bulkInsertRows(client, tableName, plan.profiles, plan.parsed.rows);
+
+        const datasetResult = await client.query<{
+          id: string;
+          name: string;
+          row_count: number;
+          column_count: number;
+          is_demo: boolean;
+          created_at: string;
+        }>(
+          `INSERT INTO datasets
+             (id, user_id, name, s3_key, row_count, column_count, is_demo, data_table_name, content_hash)
+           VALUES ($1, $2, $3, $4, $5, $6, false, $7, $8)
+           RETURNING id, name, row_count, column_count, is_demo, created_at`,
+          [
+            datasetId,
+            request.userId,
+            plan.displayName,
+            s3Key,
+            plan.parsed.rows.length,
+            plan.enrichedColumns.length,
+            tableName,
+            contentHash,
+          ],
+        );
+
+        const semanticResult = await client.query<{
+          id: string;
+          updated_at: string;
+        }>(
+          `INSERT INTO semantic_states (dataset_id, schema_json, understanding_card)
+           VALUES ($1, $2::jsonb, $3)
+           RETURNING id, updated_at`,
+          [datasetId, JSON.stringify(schemaJson), plan.understandingCard],
+        );
+
+        await insertSchemaEmbeddings(client, datasetId, plan.embedRows);
+
+        const ds = datasetResult.rows[0]!;
+        const ss = semanticResult.rows[0]!;
+        outResults.push({
+          dataset: {
+            id: ds.id,
+            name: ds.name,
+            rowCount: ds.row_count,
+            columnCount: ds.column_count,
+            isDemo: ds.is_demo,
+            createdAt: ds.created_at,
+          },
+          semanticState: {
+            id: ss.id,
+            datasetId,
+            schemaJson,
+            understandingCard: plan.understandingCard,
+            isUserCorrected: false,
+            updatedAt: ss.updated_at,
+          },
+          understandingCard: plan.understandingCard,
+        });
+      }
 
       await client.query('COMMIT');
-
-      const ds = datasetResult.rows[0];
-      const ss = semanticResult.rows[0];
-
-      return reply.send({
-        dataset: {
-          id: ds!.id,
-          name: ds!.name,
-          rowCount: ds!.row_count,
-          columnCount: ds!.column_count,
-          isDemo: ds!.is_demo,
-          createdAt: ds!.created_at,
-        },
-        semanticState: {
-          id: ss!.id,
-          datasetId,
-          schemaJson,
-          understandingCard,
-          isUserCorrected: false,
-          updatedAt: ss!.updated_at,
-        },
-        understandingCard,
-        piiSummary: {
-          redactedColumns: [],
-          totalRedactions: 0,
-        },
-      });
     } catch (err) {
       await client.query('ROLLBACK');
       fastify.log.error({ err }, 'Upload DB transaction failed');
@@ -584,5 +853,15 @@ export default async function datasetsRoutes(fastify: FastifyInstance) {
     } finally {
       client.release();
     }
+
+    const first = outResults[0]!;
+    return reply.send({
+      uploadBatchId,
+      results: outResults,
+      dataset: first.dataset,
+      semanticState: first.semanticState,
+      understandingCard: first.understandingCard,
+      piiSummary: piiSummaryOut,
+    });
   });
 }

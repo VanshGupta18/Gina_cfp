@@ -102,3 +102,142 @@ export async function generateNarration(input: NarratorInput): Promise<string> {
   }
   return narrateWithGroq(input);
 }
+
+// ─── Short “how we answered” note (SQL analytics path only) ───────────────────
+
+const EXPLANATION_SYSTEM = `You write a very short note for non-technical readers in a sidebar titled "How we answered".
+
+Voice: friendly, plain English, second person ("you") and "we". No markdown, bullets, or headings.
+
+Content (keep it minimal—not always a full paragraph):
+- Sentence 1: What they asked for, in everyday words (mirror their question, not a technical rewrite).
+- Sentence 2 (or same sentence, clause 2): What we looked at—use ONLY the friendly field names provided. Say "we looked at …" or "we used …". Never say "SQL", "query", "rows", "dataset", or raw snake_case identifiers if a friendly name is given.
+- Do not repeat the long answer above. Do not list every value, product name, or ranking unless the question was that specific—stay high level.
+- Usually 1–2 short sentences total; use 3 only if unavoidable. Aim under 45 words.
+
+Never invent numbers or facts; only use the question text and the field names supplied.`;
+
+export type ExplanationInput = {
+  question: string;
+  understandingCard: string;
+  relevantColumns: string[];
+  /** Human labels for relevant fields (e.g. businessLabel), same order as relevantColumns when possible. */
+  columnLabels?: string[];
+  narrative: string;
+  primaryRows: ResultRow[];
+  sql: string;
+};
+
+function capExplanation(s: string, max = 380): string {
+  const t = s.trim();
+  if (t.length <= max) return t;
+  return `${t.slice(0, max - 1)}…`;
+}
+
+function buildExplanationUserMessage(input: ExplanationInput): string {
+  const uc = input.understandingCard.slice(0, 280);
+  const friendly =
+    input.columnLabels && input.columnLabels.length > 0
+      ? input.columnLabels.join('; ')
+      : input.relevantColumns.length > 0
+        ? input.relevantColumns.join(', ')
+        : '(field names not specified)';
+  const gist =
+    input.narrative.length > 200 ? `${input.narrative.slice(0, 200)}…` : input.narrative;
+  return [
+    `What they asked: ${input.question}`,
+    `Dataset blurb (context only): ${uc}`,
+    `Friendly field names to mention: ${friendly}`,
+    `Answer summary (do not repeat verbatim; for tone only): ${gist}`,
+    `Sample of values returned (JSON, for grounding only—do not recite): ${JSON.stringify(input.primaryRows.slice(0, 8))}`,
+    '',
+    'Write 1–2 short sentences as specified.',
+  ].join('\n');
+}
+
+/** Deterministic trace when the query returns zero rows (no extra LLM). */
+export function emptyResultExplanation(input: {
+  question: string;
+  relevantColumns: string[];
+  columnLabels?: string[];
+}): string {
+  const lookedAt =
+    input.columnLabels && input.columnLabels.length > 0
+      ? input.columnLabels.join(', ')
+      : input.relevantColumns.length > 0
+        ? input.relevantColumns.join(', ')
+        : 'your data';
+  return capExplanation(
+    `You asked a question we understood. We looked at ${lookedAt}, but nothing matched—try a wider date range, fewer filters, or rephrasing.`,
+    320,
+  );
+}
+
+function fallbackExplanation(input: ExplanationInput): string {
+  const friendly =
+    input.columnLabels && input.columnLabels.length > 0
+      ? input.columnLabels.join(', ')
+      : input.relevantColumns.length
+        ? input.relevantColumns.join(', ')
+        : 'your data';
+  return capExplanation(
+    `You asked a question; we used ${friendly} from your data to build the answer above.`,
+    320,
+  );
+}
+
+async function explainWithGroq(input: ExplanationInput): Promise<string> {
+  const result = await runGroqQueued(() => {
+    const groq = new Groq({ apiKey: groqPool.next() });
+    return groq.chat.completions
+      .create({
+        model: env.GROQ_MODEL_NARRATOR,
+        temperature: 0.25,
+        max_tokens: 120,
+        messages: [
+          { role: 'system', content: EXPLANATION_SYSTEM },
+          { role: 'user', content: buildExplanationUserMessage(input) },
+        ],
+      })
+      .withResponse();
+  });
+  const text = result.choices[0]?.message?.content ?? '';
+  if (!text.trim()) throw new Error('Groq explanation empty');
+  return capExplanation(text.trim());
+}
+
+async function explainWithGemini(input: ExplanationInput): Promise<string> {
+  const apiKey = geminiPool.next();
+  const ai = new GoogleGenAI({ apiKey });
+  const response = await ai.models.generateContent({
+    model: env.GEMINI_MODEL,
+    contents: [
+      {
+        role: 'user',
+        parts: [{ text: `${EXPLANATION_SYSTEM}\n\n${buildExplanationUserMessage(input)}` }],
+      },
+    ],
+  });
+  const text = response.text ?? '';
+  if (!text.trim()) throw new Error('Gemini explanation empty');
+  return capExplanation(text.trim());
+}
+
+/**
+ * Short transparency note after the main narration (SQL path with rows).
+ * Skipped when narration cache hits (orchestrator does not call this).
+ */
+export async function generateExplanation(input: ExplanationInput): Promise<string> {
+  try {
+    if (env.USE_GEMINI_NARRATOR) {
+      try {
+        return await explainWithGemini(input);
+      } catch {
+        return await explainWithGroq(input);
+      }
+    }
+    return await explainWithGroq(input);
+  } catch {
+    return fallbackExplanation(input);
+  }
+}

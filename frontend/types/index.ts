@@ -48,6 +48,20 @@ export interface SemanticState {
   updatedAt: string;
 }
 
+/** GET /api/datasets/:datasetId/preview — native sheet viewer */
+export interface DatasetPreviewColumn {
+  key: string;
+  label: string;
+}
+
+export interface DatasetPreviewResponse {
+  columns: DatasetPreviewColumn[];
+  rows: Record<string, string>[];
+  totalRows: number;
+  limit: number;
+  offset: number;
+}
+
 export interface Conversation {
   id: string;
   datasetId: string;
@@ -122,6 +136,12 @@ export interface BigNumberChartData {
 
 export type ChartData = StandardChartData | BigNumberChartData;
 
+/** Primary SQL result grid (matches backend QueryResultPayload.resultTable). */
+export interface QueryResultTable {
+  columns: Array<{ key: string; label: string }>;
+  rows: Array<Record<string, string>>;
+}
+
 export interface OutputPayload {
   messageId: string;
   keyFigure: string;
@@ -137,6 +157,12 @@ export interface OutputPayload {
   cacheHit?: boolean;
   autoInsights: string[];
   snapshotUsed: boolean;
+  /** One-paragraph transparency (SQL analytics path). */
+  explanation?: string;
+  resultTable?: QueryResultTable | null;
+  resultTruncated?: boolean;
+  /** Pipeline wall time until answer ready (ms). */
+  totalTimeMs?: number;
 }
 
 // =====================================================
@@ -148,7 +174,16 @@ export interface AuthUser {
   email: string;
 }
 
+export interface UploadSheetResult {
+  dataset: Dataset;
+  semanticState: SemanticState;
+  understandingCard: string;
+}
+
 export interface UploadResult {
+  uploadBatchId: string;
+  results: UploadSheetResult[];
+  /** First created dataset (backward compatible shortcut) */
   dataset: Dataset;
   semanticState: SemanticState;
   understandingCard: string;

@@ -2,7 +2,7 @@ import { readdir, readFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { z } from 'zod';
-import type { QueryResultPayload } from '../types/queryResultPayload.js';
+import type { QueryResultPayload, QueryResultTable } from '../types/queryResultPayload.js';
 
 /** Delay between simulated SSE `step` events (Phase 6). */
 export const SIMULATED_STEP_DELAY_MS = 200;
@@ -21,6 +21,11 @@ const chartDataSchema = z.union([
   z.object({ value: z.number(), label: z.string() }),
 ]);
 
+const resultTableSchema: z.ZodType<QueryResultTable> = z.object({
+  columns: z.array(z.object({ key: z.string(), label: z.string() })),
+  rows: z.array(z.record(z.string(), z.string())),
+});
+
 const snapshotOutputPayloadSchema = z.object({
   narrative: z.string(),
   chartType: z.enum(['bar', 'line', 'big_number', 'grouped_bar', 'stacked_bar', 'table']),
@@ -35,6 +40,10 @@ const snapshotOutputPayloadSchema = z.object({
   autoInsights: z.array(z.string()),
   cacheHit: z.boolean().optional(),
   snapshotUsed: z.boolean().optional(),
+  explanation: z.string().optional(),
+  resultTable: resultTableSchema.nullable().optional(),
+  resultTruncated: z.boolean().optional(),
+  totalTimeMs: z.number().optional(),
 });
 
 const demoSnapshotFileSchema = z.object({
@@ -68,6 +77,10 @@ function toQueryResultPayload(
     autoInsights: raw.autoInsights,
     cacheHit: raw.cacheHit ?? false,
     snapshotUsed: raw.snapshotUsed ?? true,
+    explanation: raw.explanation ?? '',
+    resultTable: raw.resultTable ?? null,
+    resultTruncated: raw.resultTruncated ?? false,
+    totalTimeMs: raw.totalTimeMs ?? 0,
   };
 }
 
