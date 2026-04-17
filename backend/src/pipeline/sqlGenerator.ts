@@ -273,17 +273,19 @@ async function tierGroqMaverick(prompt: string): Promise<string | null> {
   return extractSqlFromLooseText(text);
 }
 
-/**
- * §6.2 — Planner intent: `simple` → Maverick → templates; `complex` → HF → Maverick → templates.
- * Validates after each tier.
- */
-export async function generateSql(params: {
+type GenerateSqlParams = {
   question: string;
   tableName: string;
   columns: ColumnProfile[];
   metricDefinitions?: string;
   sqlTierMode: SqlTierMode;
-}): Promise<GenerateSqlResult> {
+};
+
+/**
+ * One full pass: `simple` → Maverick → templates; `complex` → HF → Maverick → templates.
+ * Validates after each tier. Returns null if every tier fails or yields invalid SQL.
+ */
+async function tryGenerateSqlOnce(params: GenerateSqlParams): Promise<GenerateSqlResult | null> {
   const { question, tableName, columns, metricDefinitions = '', sqlTierMode } = params;
   const prompt = buildSqlCoderPrompt({ question, tableName, columns, metricDefinitions });
   const allowedTables = [tableName];
@@ -319,6 +321,23 @@ export async function generateSql(params: {
   const tmpl = tryTemplateSql(question, tableName, columns);
   const td = tryTier(tmpl, 'template');
   if (td) return td;
+
+  return null;
+}
+
+/**
+ * §6.2 — Planner intent: `simple` → Maverick → templates; `complex` → HF → Maverick → templates.
+ * Validates after each tier. Runs the full chain twice before failing.
+ */
+export async function generateSql(params: GenerateSqlParams): Promise<GenerateSqlResult> {
+  let result = await tryGenerateSqlOnce(params);
+  if (result) return result;
+
+  if (env.SQL_TIER_LOG) {
+    logSqlTier('full fallback chain retry (attempt 2/2)');
+  }
+  result = await tryGenerateSqlOnce(params);
+  if (result) return result;
 
   throw new Error(
     'SQL generation failed: all tiers exhausted or produced invalid SQL for this question/schema',
