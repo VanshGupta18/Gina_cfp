@@ -62,3 +62,16 @@ export async function patchSemanticState(
 
   return response;
 }
+
+export async function updateDataset(datasetId: string, body: { name: string }): Promise<Dataset> {
+  return apiFetch<Dataset>(`/api/datasets/${datasetId}`, {
+    method: 'PATCH',
+    body: JSON.stringify(body),
+  });
+}
+
+export async function deleteDataset(datasetId: string): Promise<void> {
+  await apiFetch<{ ok: boolean }>(`/api/datasets/${datasetId}`, {
+    method: 'DELETE',
+  });
+}

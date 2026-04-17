@@ -23,3 +23,19 @@ export async function createConversation(
 
   return response;
 }
+
+export async function updateConversation(
+  conversationId: string,
+  body: { title: string }
+): Promise<Conversation> {
+  return apiFetch<Conversation>(`/api/conversations/${conversationId}`, {
+    method: 'PATCH',
+    body: JSON.stringify(body),
+  });
+}
+
+export async function deleteConversation(conversationId: string): Promise<void> {
+  await apiFetch<{ ok: boolean }>(`/api/conversations/${conversationId}`, {
+    method: 'DELETE',
+  });
+}

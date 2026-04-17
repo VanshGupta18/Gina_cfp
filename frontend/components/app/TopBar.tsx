@@ -3,6 +3,8 @@
 import React, { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { useToast } from '@/lib/providers/ToastProvider';
+import { updateDataset, deleteDataset } from '@/lib/api/datasets';
 import type { Dataset } from '@/types';
 import { useDatasets } from '@/lib/hooks/useDatasets';
 import { useConversation } from '@/lib/hooks/useConversation';
@@ -19,6 +21,8 @@ import {
   Sparkles,
   Database,
   Table2,
+  Edit2,
+  Trash2,
 } from 'lucide-react';
 import clsx from 'clsx';
 
@@ -34,14 +38,16 @@ export default function TopBar({
   onOpenDatasetSheet,
 }: TopBarProps) {
   const router = useRouter();
+  const { showToast } = useToast();
   const { user, signOut } = useAuth();
-  const { datasets, activeDataset, setActiveDataset } = useDatasets();
+  const { datasets, activeDataset, setActiveDataset, refreshDatasets } = useDatasets();
   const { createNewConversation } = useConversation();
   const { openUploadModal } = useUploadModal();
 
   const [datasetMenuOpen, setDatasetMenuOpen] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [creatingChat, setCreatingChat] = useState(false);
+  const [datasetMutating, setDatasetMutating] = useState(false);
 
   const datasetRef = useRef<HTMLDivElement>(null);
   const userRef = useRef<HTMLDivElement>(null);
@@ -60,6 +66,51 @@ export default function TopBar({
     setActiveDataset(d);
     setDatasetMenuOpen(false);
     router.push('/app');
+  };
+
+  const handleRenameDataset = async () => {
+    if (!activeDataset || activeDataset.isDemo || datasetMutating) return;
+    const next = window.prompt('Dataset name', activeDataset.name);
+    if (next === null) return;
+    const trimmed = next.trim();
+    if (!trimmed) {
+      showToast('Name cannot be empty', 'error');
+      return;
+    }
+    setDatasetMutating(true);
+    try {
+      await updateDataset(activeDataset.id, { name: trimmed });
+      await refreshDatasets();
+      showToast('Dataset renamed', 'success');
+    } catch {
+      showToast('Failed to rename dataset', 'error');
+    } finally {
+      setDatasetMutating(false);
+    }
+  };
+
+  const handleDeleteDataset = async () => {
+    if (!activeDataset || activeDataset.isDemo || datasetMutating) return;
+    const label = activeDataset.name;
+    if (
+      !window.confirm(
+        `Delete dataset "${label}"?\n\nAll conversations for this dataset will be permanently removed.`,
+      )
+    ) {
+      return;
+    }
+    setDatasetMutating(true);
+    try {
+      await deleteDataset(activeDataset.id);
+      setDatasetMenuOpen(false);
+      await refreshDatasets();
+      router.push('/app');
+      showToast('Dataset deleted', 'success');
+    } catch {
+      showToast('Failed to delete dataset', 'error');
+    } finally {
+      setDatasetMutating(false);
+    }
   };
 
   const handleNewChat = async () => {
@@ -169,6 +220,32 @@ export default function TopBar({
               className="my-1.5"
               style={{ borderTop: '1px solid rgba(255,255,255,0.06)' }}
             />
+            {activeDataset && !activeDataset.isDemo && (
+              <>
+                <button
+                  type="button"
+                  onClick={() => void handleRenameDataset()}
+                  disabled={datasetMutating}
+                  className="flex w-full items-center gap-3 px-3 py-2.5 text-left text-sm text-slate-300 transition-all duration-150 hover:bg-white/5 hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <Edit2 className="h-3.5 w-3.5 shrink-0 text-slate-500" />
+                  Rename dataset
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void handleDeleteDataset()}
+                  disabled={datasetMutating}
+                  className="flex w-full items-center gap-3 px-3 py-2.5 text-left text-sm text-red-400 transition-all duration-150 hover:bg-red-500/10 hover:text-red-300 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <Trash2 className="h-3.5 w-3.5 shrink-0" />
+                  Delete dataset
+                </button>
+                <div
+                  className="my-1.5"
+                  style={{ borderTop: '1px solid rgba(255,255,255,0.06)' }}
+                />
+              </>
+            )}
             <button
               type="button"
               onClick={() => {

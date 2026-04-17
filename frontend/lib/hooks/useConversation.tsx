@@ -1,8 +1,14 @@
 'use client';
 
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
 import type { Conversation, Message } from '@/types';
-import { listConversations, createConversation } from '@/lib/api/conversations';
+import {
+  listConversations,
+  createConversation,
+  updateConversation,
+  deleteConversation as deleteConversationRequest,
+} from '@/lib/api/conversations';
 import { getMessages } from '@/lib/api/messages';
 import { useDatasets } from './useDatasets';
 
@@ -12,6 +18,8 @@ interface ConversationContextType {
   setActiveConversation: (conversation: Conversation | string | null) => void;
   refreshConversations: () => Promise<void>;
   createNewConversation: (title?: string) => Promise<Conversation | null>;
+  renameConversation: (conversationId: string, title: string) => Promise<void>;
+  removeConversation: (conversationId: string) => Promise<void>;
   messages: Message[];
   addMessage: (msg: Message) => void;
   isLoading: boolean;
@@ -21,8 +29,9 @@ interface ConversationContextType {
 const ConversationContext = createContext<ConversationContextType | undefined>(undefined);
 
 export function ConversationProvider({ children }: { children: React.ReactNode }) {
+  const router = useRouter();
   const { activeDataset } = useDatasets();
-  
+
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [activeConversationState, setActiveConversationState] = useState<Conversation | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -120,6 +129,63 @@ export function ConversationProvider({ children }: { children: React.ReactNode }
     }
   }, [activeDataset]);
 
+  const renameConversation = useCallback(
+    async (conversationId: string, title: string) => {
+      const trimmed = title.trim();
+      if (!trimmed) {
+        setError('Title cannot be empty');
+        return;
+      }
+      setIsLoading(true);
+      setError(null);
+      try {
+        const updated = await updateConversation(conversationId, { title: trimmed });
+        setConversations((prev) =>
+          prev.map((c) => (c.id === conversationId ? updated : c)),
+        );
+        setActiveConversationState((current) =>
+          current?.id === conversationId ? updated : current,
+        );
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : 'Failed to rename conversation';
+        setError(message);
+        throw err;
+      } finally {
+        setIsLoading(false);
+      }
+    },
+    [],
+  );
+
+  const removeConversation = useCallback(
+    async (conversationId: string) => {
+      setIsLoading(true);
+      setError(null);
+      try {
+        await deleteConversationRequest(conversationId);
+        setConversations((prev) => prev.filter((c) => c.id !== conversationId));
+        let clearedActive = false;
+        setActiveConversationState((current) => {
+          if (current?.id === conversationId) {
+            clearedActive = true;
+            return null;
+          }
+          return current;
+        });
+        if (clearedActive) {
+          router.push('/app');
+        }
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : 'Failed to delete conversation';
+        setError(message);
+        throw err;
+      } finally {
+        setIsLoading(false);
+      }
+    },
+    [router],
+  );
+
   const addMessage = useCallback((msg: Message) => {
     setMessages((prev) => [...prev, msg]);
   }, []);
@@ -132,6 +198,8 @@ export function ConversationProvider({ children }: { children: React.ReactNode }
         setActiveConversation,
         refreshConversations,
         createNewConversation,
+        renameConversation,
+        removeConversation,
         messages,
         addMessage,
         isLoading,

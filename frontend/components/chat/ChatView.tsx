@@ -18,7 +18,7 @@ import type { QueryPayload } from '@/types';
 export function ChatView() {
   const { activeDataset, refreshDatasets } = useDatasets();
   const [correctionModalOpen, setCorrectionModalOpen] = useState(false);
-  const { activeConversation, messages, addMessage } = useConversation();
+  const { activeConversation, messages, addMessage, refreshConversations } = useConversation();
   const { steps, result, isStreaming, error, runQuery } = usePipeline();
   const { showReasoning } = useReasoningToggle();
 
@@ -48,8 +48,10 @@ export function ChatView() {
         outputPayload: result,
         createdAt: new Date().toISOString(),
       });
+      // Backend sets title from first question when title IS NULL — refresh list so sidebar/header match
+      void refreshConversations();
     }
-  }, [isStreaming, result, activeConversation, addMessage]);
+  }, [isStreaming, result, activeConversation, addMessage, refreshConversations]);
 
   // Listen for auto-submit from follow-up suggestions
   useEffect(() => {

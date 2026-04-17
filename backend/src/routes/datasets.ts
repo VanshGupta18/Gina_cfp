@@ -9,7 +9,7 @@ import {
   displayNameForSheet,
   sanitizeFilenameForDisplay,
 } from '../utils/datasetNaming.js';
-import { uploadToS3 } from '../utils/s3.js';
+import { deleteFromS3, uploadToS3 } from '../utils/s3.js';
 import { profileColumns, coerceValue } from '../semantic/profiler.js';
 import type { ColumnProfile } from '../semantic/profiler.js';
 import { enrichProfilerColumns, generateUnderstandingCard } from '../semantic/enricher.js';
@@ -22,6 +22,14 @@ import { mergeAllProfilerColumns, profilerToEnricherInput } from '../semantic/me
 
 /** Maximum accepted CSV file size: 50 MB (Phase 7 boundary test). */
 export const MAX_CSV_UPLOAD_BYTES = 50 * 1024 * 1024;
+
+const patchDatasetNameSchema = z.object({
+  name: z
+    .string()
+    .min(1)
+    .max(200)
+    .transform((s) => s.trim()),
+});
 
 const semanticPatchBodySchema = z.object({
   corrections: z
@@ -213,6 +221,137 @@ export default async function datasetsRoutes(fastify: FastifyInstance) {
         demoSlug: r.demo_slug,
         createdAt: r.created_at,
       };
+    },
+  );
+
+  // PATCH /api/datasets/:datasetId — rename (owner, non-demo only)
+  fastify.patch<{
+    Params: { datasetId: string };
+    Body: unknown;
+  }>('/datasets/:datasetId', async (request, reply) => {
+    const parsed = patchDatasetNameSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.status(400).send({ error: 'Invalid body', details: parsed.error.flatten() });
+    }
+    const { datasetId } = request.params;
+    const newName = parsed.data.name;
+
+    const { rows: existing } = await fastify.db.query<{ id: string; is_demo: boolean }>(
+      `SELECT id, is_demo FROM datasets WHERE id = $1::uuid AND user_id = $2::uuid`,
+      [datasetId, request.userId],
+    );
+    if (existing.length === 0) {
+      return reply.status(404).send({ error: 'Dataset not found' });
+    }
+    if (existing[0]!.is_demo) {
+      return reply.status(403).send({ error: 'Demo datasets cannot be renamed' });
+    }
+
+    const { rows: nameClash } = await fastify.db.query(
+      `SELECT 1 FROM datasets
+       WHERE user_id = $1::uuid AND name = $2 AND id <> $3::uuid AND is_demo = false
+       LIMIT 1`,
+      [request.userId, newName, datasetId],
+    );
+    if (nameClash.length > 0) {
+      return reply.status(409).send({ error: 'You already have a dataset with this name' });
+    }
+
+    const { rows } = await fastify.db.query<{
+      id: string;
+      name: string;
+      row_count: number | null;
+      column_count: number | null;
+      is_demo: boolean;
+      demo_slug: string | null;
+      created_at: string;
+    }>(
+      `UPDATE datasets SET name = $1 WHERE id = $2::uuid AND user_id = $3::uuid AND is_demo = false
+       RETURNING id, name, row_count, column_count, is_demo, demo_slug, created_at`,
+      [newName, datasetId, request.userId],
+    );
+
+    if (rows.length === 0) {
+      return reply.status(404).send({ error: 'Dataset not found' });
+    }
+
+    const r = rows[0]!;
+    return {
+      id: r.id,
+      name: r.name,
+      rowCount: r.row_count,
+      columnCount: r.column_count,
+      isDemo: r.is_demo,
+      demoSlug: r.demo_slug,
+      createdAt: r.created_at,
+    };
+  });
+
+  // DELETE /api/datasets/:datasetId — owner, non-demo; DROP dynamic table + optional S3
+  fastify.delete<{ Params: { datasetId: string } }>(
+    '/datasets/:datasetId',
+    async (request, reply) => {
+      const { datasetId } = request.params;
+
+      const { rows } = await fastify.db.query<{
+        id: string;
+        data_table_name: string;
+        s3_key: string | null;
+        is_demo: boolean;
+        user_id: string;
+      }>(
+        `SELECT id, data_table_name, s3_key, is_demo, user_id FROM datasets WHERE id = $1::uuid`,
+        [datasetId],
+      );
+
+      if (rows.length === 0) {
+        return reply.status(404).send({ error: 'Dataset not found' });
+      }
+
+      const row = rows[0]!;
+      if (row.user_id !== request.userId) {
+        return reply.status(404).send({ error: 'Dataset not found' });
+      }
+      if (row.is_demo) {
+        return reply.status(403).send({ error: 'Demo datasets cannot be deleted' });
+      }
+      if (!isSafeDatasetTableName(row.data_table_name)) {
+        fastify.log.error({ data_table_name: row.data_table_name }, 'Invalid data_table_name for delete');
+        return reply.status(500).send({ error: 'Invalid dataset storage configuration' });
+      }
+
+      const client = await fastify.db.connect();
+      try {
+        await client.query('BEGIN');
+        await client.query(`DROP TABLE IF EXISTS ${quotedIdent(row.data_table_name)}`);
+        await client.query(
+          `DELETE FROM datasets WHERE id = $1::uuid AND user_id = $2::uuid AND is_demo = false`,
+          [datasetId, request.userId],
+        );
+        await client.query('COMMIT');
+      } catch (err) {
+        await client.query('ROLLBACK').catch(() => {});
+        throw err;
+      } finally {
+        client.release();
+      }
+
+      if (row.s3_key) {
+        const { rows: keyRows } = await fastify.db.query<{ n: string }>(
+          `SELECT COUNT(*)::text AS n FROM datasets WHERE s3_key = $1`,
+          [row.s3_key],
+        );
+        const remaining = Number.parseInt(keyRows[0]?.n ?? '0', 10);
+        if (remaining === 0) {
+          try {
+            await deleteFromS3(fastify.s3, row.s3_key);
+          } catch (s3Err) {
+            fastify.log.warn({ err: s3Err, s3_key: row.s3_key }, 'S3 delete failed after dataset row removed');
+          }
+        }
+      }
+
+      return reply.status(200).send({ ok: true });
     },
   );
 

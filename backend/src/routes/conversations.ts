@@ -1,4 +1,13 @@
 import type { FastifyInstance } from 'fastify';
+import { z } from 'zod';
+
+const patchConversationBodySchema = z.object({
+  title: z
+    .string()
+    .min(1)
+    .max(120)
+    .transform((s) => s.trim()),
+});
 
 export default async function conversationsRoutes(fastify: FastifyInstance) {
   // GET /api/datasets/:datasetId/conversations — list conversations for a dataset
@@ -80,6 +89,67 @@ export default async function conversationsRoutes(fastify: FastifyInstance) {
         createdAt: c.created_at,
         updatedAt: c.updated_at,
       };
+    },
+  );
+
+  // PATCH /api/conversations/:conversationId — rename (owner only)
+  fastify.patch<{
+    Params: { conversationId: string };
+    Body: unknown;
+  }>('/conversations/:conversationId', async (request, reply) => {
+    const parsed = patchConversationBodySchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.status(400).send({ error: 'Invalid body', details: parsed.error.flatten() });
+    }
+    const { conversationId } = request.params;
+    const title = parsed.data.title;
+
+    const { rows } = await fastify.db.query<{
+      id: string;
+      dataset_id: string;
+      user_id: string;
+      title: string | null;
+      created_at: string;
+      updated_at: string;
+    }>(
+      `UPDATE conversations
+       SET title = $1, updated_at = NOW()
+       WHERE id = $2::uuid AND user_id = $3::uuid
+       RETURNING id, dataset_id, user_id, title, created_at, updated_at`,
+      [title, conversationId, request.userId],
+    );
+
+    if (rows.length === 0) {
+      return reply.status(404).send({ error: 'Conversation not found' });
+    }
+
+    const r = rows[0]!;
+    return {
+      id: r.id,
+      datasetId: r.dataset_id,
+      userId: r.user_id,
+      title: r.title,
+      createdAt: r.created_at,
+      updatedAt: r.updated_at,
+    };
+  });
+
+  // DELETE /api/conversations/:conversationId — owner only
+  fastify.delete<{ Params: { conversationId: string } }>(
+    '/conversations/:conversationId',
+    async (request, reply) => {
+      const { conversationId } = request.params;
+
+      const { rowCount } = await fastify.db.query(
+        `DELETE FROM conversations WHERE id = $1::uuid AND user_id = $2::uuid`,
+        [conversationId, request.userId],
+      );
+
+      if (rowCount === 0) {
+        return reply.status(404).send({ error: 'Conversation not found' });
+      }
+
+      return reply.status(200).send({ ok: true });
     },
   );
 }

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import type { Conversation } from '@/types';
 import { useConversation } from '@/lib/hooks/useConversation';
 import clsx from 'clsx';
@@ -30,13 +30,22 @@ function timeAgo(dateStr: string): string {
 }
 
 export default function ConversationItem({ conversation, onAfterNavigate }: ConversationItemProps) {
-  const { activeConversation, setActiveConversation } = useConversation();
+  const {
+    activeConversation,
+    setActiveConversation,
+    renameConversation,
+    removeConversation,
+  } = useConversation();
   const router = useRouter();
   const { showToast } = useToast();
   const isActive = activeConversation?.id === conversation.id;
   const [isEditing, setIsEditing] = useState(false);
   const [editTitle, setEditTitle] = useState(conversation.title || 'New Conversation');
   const [showMenu, setShowMenu] = useState(false);
+
+  useEffect(() => {
+    setEditTitle(conversation.title || 'New Conversation');
+  }, [conversation.id, conversation.title]);
 
   const handleNavigate = () => {
     setActiveConversation(conversation);
@@ -45,11 +54,18 @@ export default function ConversationItem({ conversation, onAfterNavigate }: Conv
   };
 
   const handleRename = async () => {
-    if (!editTitle.trim()) {
+    const trimmed = editTitle.trim();
+    if (!trimmed) {
       showToast('Title cannot be empty', 'error');
       return;
     }
+    // DB title is still null: don't save the UI placeholder as a real title, or auto-title from the first message would never run
+    if (!conversation.title && trimmed === 'New Conversation') {
+      setIsEditing(false);
+      return;
+    }
     try {
+      await renameConversation(conversation.id, trimmed);
       showToast('Conversation renamed', 'success');
       setIsEditing(false);
     } catch {
@@ -57,13 +73,13 @@ export default function ConversationItem({ conversation, onAfterNavigate }: Conv
     }
   };
 
-  const handleDelete = () => {
-    if (window.confirm(`Delete conversation "${conversation.title || 'Untitled'}"?`)) {
-      try {
-        showToast('Conversation deleted', 'success');
-      } catch {
-        showToast('Failed to delete conversation', 'error');
-      }
+  const handleDelete = async () => {
+    if (!window.confirm(`Delete conversation "${conversation.title || 'Untitled'}"?`)) return;
+    try {
+      await removeConversation(conversation.id);
+      showToast('Conversation deleted', 'success');
+    } catch {
+      showToast('Failed to delete conversation', 'error');
     }
   };
 
@@ -76,8 +92,11 @@ export default function ConversationItem({ conversation, onAfterNavigate }: Conv
         onChange={(e) => setEditTitle(e.target.value)}
         onBlur={handleRename}
         onKeyDown={(e) => {
-          if (e.key === 'Enter') handleRename();
-          if (e.key === 'Escape') setIsEditing(false);
+          if (e.key === 'Enter') void handleRename();
+          if (e.key === 'Escape') {
+            setEditTitle(conversation.title || 'New Conversation');
+            setIsEditing(false);
+          }
         }}
         className="w-full rounded-lg px-3 py-2 text-sm text-white focus:outline-none"
         style={{
