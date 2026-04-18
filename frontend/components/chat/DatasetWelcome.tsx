@@ -9,17 +9,20 @@ interface DatasetWelcomeProps {
 
 export function DatasetWelcome({ dataset }: DatasetWelcomeProps) {
   return (
-    <div className="max-w-4xl mx-auto px-6 py-14">
-      <div
-        className="rounded-2xl p-6"
-        style={{
-          background: 'linear-gradient(160deg, rgba(20,24,34,0.95) 0%, rgba(28,33,46,0.85) 100%)',
-          border: '1px solid rgba(255,255,255,0.08)',
-          boxShadow: '0 4px 32px rgba(0,0,0,0.25), inset 0 1px 0 rgba(255,255,255,0.04)',
-        }}
-      >
-        <div className="flex items-center gap-3 mb-4">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-brand-indigo/20 border border-brand-indigo/30">
+    <div
+      className="relative overflow-hidden rounded-2xl p-6 md:p-7"
+      style={{
+        background: 'linear-gradient(160deg, rgba(20,24,34,0.95) 0%, rgba(28,33,46,0.85) 100%)',
+        border: '1px solid rgba(255,255,255,0.08)',
+        boxShadow: '0 4px 32px rgba(0,0,0,0.25), inset 0 1px 0 rgba(255,255,255,0.04)',
+      }}
+    >
+      <div className="pointer-events-none absolute -top-16 right-0 h-40 w-40 rounded-full bg-brand-indigo/15 blur-3xl" />
+      <div className="pointer-events-none absolute -bottom-16 left-20 h-36 w-36 rounded-full bg-brand-teal/10 blur-3xl" />
+
+      <div className="relative">
+        <div className="mb-4 flex items-center gap-3">
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-brand-indigo/30 bg-brand-indigo/20">
             <Database className="h-5 w-5 text-brand-indigo-light" />
           </div>
           <div className="min-w-0">

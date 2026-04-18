@@ -1,6 +1,7 @@
 'use client';
 
 import React from 'react';
+import { toFriendlyErrorMessage } from '@/lib/utils/errorMessages';
 
 interface SidebarErrorStateProps {
   error: string;
@@ -8,6 +9,8 @@ interface SidebarErrorStateProps {
 }
 
 export function SidebarErrorState({ error, onRetry }: SidebarErrorStateProps) {
+  const friendlyMessage = toFriendlyErrorMessage(new Error(error));
+
   return (
     <div className="mx-2 space-y-2">
       <div
@@ -17,7 +20,7 @@ export function SidebarErrorState({ error, onRetry }: SidebarErrorStateProps) {
           border: '1px solid rgba(239,68,68,0.2)',
         }}
       >
-        {error}
+        {friendlyMessage}
       </div>
       <button
         type="button"

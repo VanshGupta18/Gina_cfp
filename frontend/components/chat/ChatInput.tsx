@@ -1,12 +1,18 @@
 'use client';
 
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { QueryPayload, type SessionContext } from '@/types';
 import { useConversation } from '@/lib/hooks/useConversation';
 import { useKeyboardShortcuts } from '@/lib/hooks/useKeyboardShortcuts';
 import { Send } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
+
+const PLACEHOLDER_HINTS = [
+  'Which month had the highest donations?',
+  'Show me the top 5 donors',
+  'Summarize this dataset in plain English',
+];
 
 export interface ChatInputProps {
   isStreaming: boolean;
@@ -20,8 +26,17 @@ export function ChatInput({
   onSubmit,
 }: ChatInputProps) {
   const [input, setInput] = useState('');
+  const [placeholderIndex, setPlaceholderIndex] = useState(0);
   const { activeConversation } = useConversation();
   const formRef = useRef<HTMLFormElement>(null);
+
+  // Rotate placeholder hints every 3 seconds
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setPlaceholderIndex((prev) => (prev + 1) % PLACEHOLDER_HINTS.length);
+    }, 3000);
+    return () => clearInterval(interval);
+  }, []);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -76,11 +91,11 @@ export function ChatInput({
         >
           <Input
             type="text"
-            placeholder="Ask a question about your data…"
+            placeholder={PLACEHOLDER_HINTS[placeholderIndex]}
             value={input}
             onChange={(e) => setInput(e.target.value)}
             disabled={isStreaming}
-            className="flex-1 h-auto bg-transparent border-none shadow-none py-4 pl-5 pr-2 text-sm text-slate-200 placeholder-slate-600 focus-visible:ring-0 focus:outline-none disabled:opacity-50 italic-placeholder"
+            className="flex-1 h-auto bg-transparent border-none shadow-none py-4 pl-5 pr-2 text-sm text-slate-200 placeholder-slate-500 focus-visible:ring-0 focus:outline-none disabled:opacity-50 transition-all duration-500 ease-in-out"
             style={{ fontStyle: 'normal' }}
           />
 

@@ -6,6 +6,7 @@ import { uploadDataset } from '@/lib/api/datasets';
 import { createConversation } from '@/lib/api/conversations';
 import { useDatasets } from '@/lib/hooks/useDatasets';
 import { isRateLimitError, parseRateLimitError } from '@/lib/api/errors';
+import { toFriendlyErrorMessage } from '@/lib/utils/errorMessages';
 import PIISummaryBanner from './PIISummaryBanner';
 import UnderstandingCard from './UnderstandingCard';
 import { InlineCorrectionPanel } from '@/components/semantic/InlineCorrectionPanel';
@@ -36,6 +37,8 @@ export default function UploadModal({ onClose }: UploadModalProps) {
   const [uploadedDatasetId, setUploadedDatasetId] = useState<string | null>(null);
   const [correctionModalOpen, setCorrectionModalOpen] = useState(false);
   const [fileDetails, setFileDetails] = useState<{ name: string; size: string } | null>(null);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [uploadStatus, setUploadStatus] = useState<'scanning' | 'processing' | 'complete'>('scanning');
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const pendingFileRef = useRef<File | null>(null);
@@ -53,6 +56,38 @@ export default function UploadModal({ onClose }: UploadModalProps) {
     return () => clearTimeout(timer);
   }, [isWaitingForRateLimit, retryAfterSeconds]);
 
+  // Simulate progress bar while uploading
+  useEffect(() => {
+    if (!isProcessing) {
+      setUploadProgress(0);
+      setUploadStatus('scanning');
+      return;
+    }
+
+    // Start progress
+    setUploadProgress(10);
+    setUploadStatus('scanning');
+
+    const interval = setInterval(() => {
+      setUploadProgress((prev) => {
+        if (prev < 80) {
+          return prev + Math.random() * 15;
+        }
+        return prev;
+      });
+
+      // Update status messages
+      setUploadStatus((prev) => {
+        if (prev === 'scanning' && Math.random() > 0.6) {
+          return 'processing';
+        }
+        return prev;
+      });
+    }, 600);
+
+    return () => clearInterval(interval);
+  }, [isProcessing]);
+
   const formatBytes = (bytes: number, decimals = 2) => {
     if (!+bytes) return '0 Bytes';
     const k = 1024;
@@ -68,12 +103,16 @@ export default function UploadModal({ onClose }: UploadModalProps) {
       setError(null);
       setIsWaitingForRateLimit(false);
       setRetryAfterSeconds(undefined);
+      setUploadProgress(0);
+      setUploadStatus('scanning');
       pendingFileRef.current = null;
       try {
         const result = await uploadDataset(file);
         setPiiSummary(result.piiSummary);
         setUnderstandingCard(result.understandingCard);
         setUploadedDatasetId(result.dataset.id);
+        setUploadProgress(100);
+        setUploadStatus('complete');
         setStep(3);
         await refreshDatasets();
       } catch (err: unknown) {
@@ -88,8 +127,8 @@ export default function UploadModal({ onClose }: UploadModalProps) {
           // Keep isProcessing true so spinner keeps showing
           return;
         } else {
-          const message = err instanceof Error ? err.message : 'Upload failed. Please try again.';
-          setError(message);
+          const friendlyMessage = toFriendlyErrorMessage(err);
+          setError(friendlyMessage);
         }
       } finally {
         if (!isWaitingForRateLimit) {
@@ -104,11 +143,11 @@ export default function UploadModal({ onClose }: UploadModalProps) {
     async (file: File) => {
       const lower = file.name.toLowerCase();
       if (!lower.endsWith('.csv') && !lower.endsWith('.xlsx') && !lower.endsWith('.xls')) {
-        setError('Please upload a .csv, .xlsx, or .xls file');
+        setError('That file format isn\'t supported. Please use CSV, XLSX, or XLS files.');
         return;
       }
       if (file.size > 50 * 1024 * 1024) {
-        setError('File size must be under 50MB');
+        setError('Your file is too large. Please upload a file under 50MB.');
         return;
       }
 
@@ -290,11 +329,28 @@ export default function UploadModal({ onClose }: UploadModalProps) {
             {isProcessing ? (
               <div className="rounded-xl border border-white/10 bg-white/[0.02] p-8 flex flex-col items-center gap-4 text-center">
                 <div className="w-10 h-10 border-2 border-brand-indigo-light/30 border-t-brand-indigo-light rounded-full animate-spin" />
-                <p className="text-sm text-slate-300">
-                  {isWaitingForRateLimit
-                    ? 'Finalizing upload…'
-                    : 'Uploading and scanning for personally identifiable information…'}
-                </p>
+                <div className="flex flex-col gap-1">
+                  <p className="text-sm text-slate-300">
+                    {isWaitingForRateLimit
+                      ? 'Finalizing upload…'
+                      : uploadStatus === 'processing'
+                        ? 'Reading your data…'
+                        : 'Uploading and scanning for PII…'}
+                  </p>
+                  <p className="text-xs text-slate-500">
+                    {uploadProgress > 0 && uploadProgress < 100
+                      ? `${Math.round(uploadProgress)}% complete`
+                      : ''}
+                  </p>
+                </div>
+
+                {/* Progress Bar */}
+                <div className="w-full h-1.5 bg-slate-700 rounded-full overflow-hidden mt-2">
+                  <div
+                    className="h-full bg-gradient-to-r from-brand-indigo to-brand-teal rounded-full transition-all duration-500"
+                    style={{ width: `${uploadProgress}%` }}
+                  />
+                </div>
               </div>
             ) : null}
 
@@ -342,6 +398,23 @@ export default function UploadModal({ onClose }: UploadModalProps) {
 
         {step === 3 && understandingCard && (
           <div className="flex flex-col gap-6 animate-in fade-in duration-500">
+            {/* Success Feedback */}
+            <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/[0.05] px-4 py-3 flex items-start gap-3 animate-in slide-in-from-top duration-500">
+              <div className="text-emerald-400 mt-0.5 shrink-0">
+                <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                  <path
+                    fillRule="evenodd"
+                    d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
+                    clipRule="evenodd"
+                  />
+                </svg>
+              </div>
+              <div>
+                <p className="text-sm font-semibold text-emerald-300">✓ Dataset ready</p>
+                <p className="text-xs text-emerald-300/70 mt-0.5">Your data is processed and secure. Ask your first question!</p>
+              </div>
+            </div>
+
             {piiSummary ? <PIISummaryBanner summary={piiSummary} /> : null}
 
             <UnderstandingCard

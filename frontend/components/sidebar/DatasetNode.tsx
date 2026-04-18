@@ -138,11 +138,11 @@ export function DatasetNode({
           onClick={handleRowClick}
           className={`
             flex min-w-0 flex-1 items-center gap-2 rounded-lg px-3 py-2.5 text-left text-sm font-medium
-            transition-colors
+            transition-all duration-200
             ${
               isActive
                 ? 'text-brand-indigo'
-                : 'text-slate-400 hover:bg-white/5 hover:text-slate-300'
+                : 'text-slate-400 hover:bg-brand-indigo/10 hover:text-slate-200'
             }
           `}
         >

@@ -7,6 +7,7 @@ import { usePipeline } from '@/lib/hooks/usePipeline';
 import { useReasoningToggle } from '@/lib/hooks/useReasoningToggle';
 import { buildSessionContextFromMessages } from '@/lib/chat/sessionContext';
 import { parseRateLimitError } from '@/lib/api/errors';
+import { toFriendlyErrorMessage } from '@/lib/utils/errorMessages';
 import { useDatasetActions } from '@/lib/context/DatasetActionsContext';
 import { CorrectionModal } from '@/components/upload/CorrectionModal';
 import { ChatInput } from './ChatInput';
@@ -14,6 +15,7 @@ import { MessageList } from './MessageList';
 import { UserMessage } from './UserMessage';
 import { AssistantMessage } from './AssistantMessage';
 import { DatasetWelcome } from './DatasetWelcome';
+import { DatasetWelcomeInput } from './DatasetWelcomeInput';
 import { ConversationWelcome } from './ConversationWelcome';
 import { RateLimitErrorPanel } from './RateLimitErrorPanel';
 import type { StarterQuestionItem } from '@/types';
@@ -175,8 +177,22 @@ export function ChatView() {
           </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto pb-32">
-          <DatasetWelcome dataset={activeDataset} />
+        <div className="flex-1 overflow-y-auto pb-24">
+          <div className="mx-auto w-full max-w-5xl px-6 pt-10">
+            <div
+              className="relative overflow-hidden rounded-3xl p-4 md:p-5"
+              style={{
+                border: '1px solid rgba(255,255,255,0.08)',
+                background: 'linear-gradient(180deg, rgba(15,18,26,0.94) 0%, rgba(12,16,24,0.76) 100%)',
+                boxShadow: '0 18px 70px rgba(0,0,0,0.42), inset 0 1px 0 rgba(255,255,255,0.05)',
+              }}
+            >
+              <div className="pointer-events-none absolute -top-24 left-20 h-56 w-56 rounded-full bg-brand-indigo/15 blur-3xl" />
+              <div className="pointer-events-none absolute -bottom-24 right-8 h-56 w-56 rounded-full bg-brand-teal/10 blur-3xl" />
+              <DatasetWelcome dataset={activeDataset} />
+              <DatasetWelcomeInput datasetId={activeDataset.id} />
+            </div>
+          </div>
         </div>
       </div>
     );
@@ -271,8 +287,8 @@ export function ChatView() {
                   />
                 ) : (
                   <div className="rounded-xl bg-red-500/10 border border-red-500/50 p-4 text-red-400 text-sm">
-                    <p className="font-semibold mb-1">Query Failed</p>
-                    <p>{error}</p>
+                    <p className="font-semibold mb-1">Hmm, I couldn't understand that</p>
+                    <p>{toFriendlyErrorMessage(new Error(error))}</p>
                   </div>
                 )}
               </div>

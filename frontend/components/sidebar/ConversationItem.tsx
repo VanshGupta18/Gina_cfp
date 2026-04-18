@@ -112,8 +112,8 @@ export default function ConversationItem({ conversation, onAfterNavigate }: Conv
       <button
         onClick={handleNavigate}
         className={clsx(
-          'w-full text-left px-3 py-2.5 rounded-lg text-sm transition-all duration-150 truncate relative overflow-hidden',
-          isActive ? 'text-white' : 'text-slate-400 hover:text-slate-200',
+          'w-full text-left px-3 py-2.5 rounded-lg text-sm transition-all duration-200 truncate relative overflow-hidden group',
+          isActive ? 'text-white' : 'text-slate-400 hover:text-slate-100',
         )}
         style={
           isActive
@@ -127,12 +127,14 @@ export default function ConversationItem({ conversation, onAfterNavigate }: Conv
         }
         onMouseEnter={(e) => {
           if (!isActive) {
-            (e.currentTarget as HTMLButtonElement).style.background = 'rgba(255,255,255,0.03)';
+            (e.currentTarget as HTMLButtonElement).style.background = 'rgba(90,78,227,0.1)';
+            (e.currentTarget as HTMLButtonElement).style.borderLeft = '2px solid rgba(90,78,227,0.3)';
           }
         }}
         onMouseLeave={(e) => {
           if (!isActive) {
             (e.currentTarget as HTMLButtonElement).style.background = '';
+            (e.currentTarget as HTMLButtonElement).style.borderLeft = '2px solid transparent';
           }
         }}
       >
