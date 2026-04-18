@@ -115,7 +115,6 @@ export default function NonTechSidebar({
         try {
           await vm.deleteDataset(dataset);
           showToast('Dataset deleted', 'success');
-          router.push('/app');
         } catch {
           showToast('Failed to delete dataset', 'error');
         } finally {
@@ -123,7 +122,7 @@ export default function NonTechSidebar({
         }
       })();
     },
-    [vm, showToast, router],
+    [vm, showToast],
   );
 
   const handleRenameChat = useCallback(
