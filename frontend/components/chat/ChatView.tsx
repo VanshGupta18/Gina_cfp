@@ -13,7 +13,16 @@ import { MessageList } from './MessageList';
 import { UserMessage } from './UserMessage';
 import { AssistantMessage } from './AssistantMessage';
 import { Sparkles } from 'lucide-react';
-import type { QueryPayload } from '@/types';
+import type { QueryPayload, StarterQuestionItem } from '@/types';
+import { getStarterQuestions } from '@/lib/api/datasets';
+
+/** Local fallback if the starter-questions API fails — generic, no spending/amount assumptions. */
+const STATIC_STARTER_QUESTIONS: StarterQuestionItem[] = [
+  { title: 'Overview', question: 'What is this dataset about at a high level?' },
+  { title: 'Preview', question: 'Show me the first 15 rows so I can see what the data looks like.' },
+  { title: 'Size', question: 'How many rows are in this dataset?' },
+  { title: 'Structure', question: 'What columns does this dataset have and what do they represent?' },
+];
 
 export function ChatView() {
   const { activeDataset, refreshDatasets } = useDatasets();
@@ -33,6 +42,31 @@ export function ChatView() {
   const openCorrections = () => setCorrectionModalOpen(true);
 
   const lastAppendedResultKey = useRef<string | null>(null);
+
+  /** `undefined` = still loading; then API or static fallback */
+  const [starterQuestions, setStarterQuestions] = useState<StarterQuestionItem[] | undefined>(undefined);
+
+  // Load contextual empty-chat starters (same pipeline idea as follow-up suggestions)
+  useEffect(() => {
+    if (!activeConversation || messages.length > 0) {
+      setStarterQuestions(undefined);
+      return;
+    }
+    let cancelled = false;
+    setStarterQuestions(undefined);
+    void getStarterQuestions(activeConversation.datasetId)
+      .then((res) => {
+        if (cancelled) return;
+        const s = res.starters;
+        setStarterQuestions(s && s.length > 0 ? s : STATIC_STARTER_QUESTIONS);
+      })
+      .catch(() => {
+        if (!cancelled) setStarterQuestions(STATIC_STARTER_QUESTIONS);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [activeConversation, messages.length]);
 
   // When streaming ends, add assistant message if result exists
   useEffect(() => {
@@ -149,62 +183,73 @@ export function ChatView() {
             </p>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 w-full">
-              {[
-                { title: 'Overview', q: 'What is the overall summary of this dataset?' },
-                { title: 'Top Spend', q: 'Show me the top 5 categories by amount spent' },
-                { title: 'Time Series', q: 'Show me the spending trend over time as a line chart' },
-                { title: 'Outliers', q: 'Are there any unusual spikes or outliers in the data?' },
-              ].map((item) => (
-                <button
-                  key={item.q}
-                  onClick={() => {
-                    const payload: QueryPayload = {
-                      conversationId: activeConversation.id,
-                      datasetId: activeConversation.datasetId,
-                      question: item.q,
-                      sessionContext: sessionContextForNextQuery,
-                    };
-                    addMessage({
-                      id: `msg-${Date.now()}`,
-                      conversationId: activeConversation.id,
-                      role: 'user',
-                      content: item.q,
-                      createdAt: new Date().toISOString(),
-                    });
-                    void runQuery(payload);
-                  }}
-                  className="group relative flex flex-col items-start px-5 py-4 rounded-xl text-left transition-all duration-200 overflow-hidden"
-                  style={{
-                    background: 'linear-gradient(135deg, rgba(20,24,34,0.9), rgba(28,33,46,0.7))',
-                    border: '1px solid rgba(255,255,255,0.07)',
-                  }}
-                  onMouseEnter={(e) => {
-                    const el = e.currentTarget as HTMLButtonElement;
-                    el.style.borderColor = 'rgba(90,78,227,0.45)';
-                    el.style.background = 'linear-gradient(135deg, rgba(90,78,227,0.10), rgba(28,33,46,0.8))';
-                    el.style.transform = 'translateY(-2px)';
-                    el.style.boxShadow = '0 8px 24px rgba(0,0,0,0.3), 0 0 0 1px rgba(90,78,227,0.15)';
-                  }}
-                  onMouseLeave={(e) => {
-                    const el = e.currentTarget as HTMLButtonElement;
-                    el.style.borderColor = 'rgba(255,255,255,0.07)';
-                    el.style.background = 'linear-gradient(135deg, rgba(20,24,34,0.9), rgba(28,33,46,0.7))';
-                    el.style.transform = '';
-                    el.style.boxShadow = '';
-                  }}
-                >
-                  <span className="text-xs font-bold tracking-widest text-brand-indigo group-hover:text-brand-indigo-light mb-1.5 uppercase flex items-center gap-2 transition-colors duration-150">
-                    <span className="w-1 h-1 rounded-full bg-brand-cyan opacity-70 shrink-0" />
-                    {item.title}
-                  </span>
-                  <span className="text-sm font-medium text-slate-300 group-hover:text-white transition-colors duration-150 leading-snug pr-6">
-                    &ldquo;{item.q}&rdquo;
-                  </span>
-                  <span className="absolute right-4 top-1/2 -translate-y-1/2 text-brand-indigo-light opacity-0 group-hover:opacity-100 transition-all duration-150 translate-x-[-4px] group-hover:translate-x-0 font-medium">
-                    →
-                  </span>
-                </button>
-              ))}
+              {starterQuestions === undefined
+                ? [0, 1, 2, 3].map((i) => (
+                    <div
+                      key={i}
+                      className="flex flex-col items-start px-5 py-4 rounded-xl border border-white/[0.07] bg-[rgba(20,24,34,0.6)] animate-pulse min-h-[108px] w-full"
+                      aria-hidden
+                    >
+                      <span className="h-3 w-24 rounded bg-slate-700/90 mb-3" />
+                      <span className="h-3 w-full max-w-[280px] rounded bg-slate-700/70 mb-2" />
+                      <span className="h-3 w-[85%] rounded bg-slate-700/50" />
+                    </div>
+                  ))
+                : starterQuestions.map((item, idx) => (
+                    <button
+                      key={`${idx}-${item.question.slice(0, 48)}`}
+                      type="button"
+                      onClick={() => {
+                        const payload: QueryPayload = {
+                          conversationId: activeConversation.id,
+                          datasetId: activeConversation.datasetId,
+                          question: item.question,
+                          sessionContext: sessionContextForNextQuery,
+                        };
+                        addMessage({
+                          id: `msg-${Date.now()}`,
+                          conversationId: activeConversation.id,
+                          role: 'user',
+                          content: item.question,
+                          createdAt: new Date().toISOString(),
+                        });
+                        void runQuery(payload);
+                      }}
+                      className="group relative flex flex-col items-start px-5 py-4 rounded-xl text-left transition-all duration-200 overflow-hidden"
+                      style={{
+                        background: 'linear-gradient(135deg, rgba(20,24,34,0.9), rgba(28,33,46,0.7))',
+                        border: '1px solid rgba(255,255,255,0.07)',
+                      }}
+                      onMouseEnter={(e) => {
+                        const el = e.currentTarget as HTMLButtonElement;
+                        el.style.borderColor = 'rgba(90,78,227,0.45)';
+                        el.style.background =
+                          'linear-gradient(135deg, rgba(90,78,227,0.10), rgba(28,33,46,0.8))';
+                        el.style.transform = 'translateY(-2px)';
+                        el.style.boxShadow =
+                          '0 8px 24px rgba(0,0,0,0.3), 0 0 0 1px rgba(90,78,227,0.15)';
+                      }}
+                      onMouseLeave={(e) => {
+                        const el = e.currentTarget as HTMLButtonElement;
+                        el.style.borderColor = 'rgba(255,255,255,0.07)';
+                        el.style.background =
+                          'linear-gradient(135deg, rgba(20,24,34,0.9), rgba(28,33,46,0.7))';
+                        el.style.transform = '';
+                        el.style.boxShadow = '';
+                      }}
+                    >
+                      <span className="text-xs font-bold tracking-widest text-brand-indigo group-hover:text-brand-indigo-light mb-1.5 uppercase flex items-center gap-2 transition-colors duration-150">
+                        <span className="w-1 h-1 rounded-full bg-brand-cyan opacity-70 shrink-0" />
+                        {item.title}
+                      </span>
+                      <span className="text-sm font-medium text-slate-300 group-hover:text-white transition-colors duration-150 leading-snug pr-6">
+                        &ldquo;{item.question}&rdquo;
+                      </span>
+                      <span className="absolute right-4 top-1/2 -translate-y-1/2 text-brand-indigo-light opacity-0 group-hover:opacity-100 transition-all duration-150 translate-x-[-4px] group-hover:translate-x-0 font-medium">
+                        →
+                      </span>
+                    </button>
+                  ))}
             </div>
           </div>
         ) : (

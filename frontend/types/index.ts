@@ -62,6 +62,12 @@ export interface DatasetPreviewResponse {
   offset: number;
 }
 
+/** GET /api/datasets/:datasetId/starter-questions */
+export interface StarterQuestionItem {
+  title: string;
+  question: string;
+}
+
 export interface Conversation {
   id: string;
   datasetId: string;

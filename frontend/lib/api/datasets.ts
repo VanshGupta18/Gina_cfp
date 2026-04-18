@@ -5,6 +5,7 @@ import type {
   SemanticState,
   SemanticCorrection,
   DatasetPreviewResponse,
+  StarterQuestionItem,
 } from '@/types';
 
 /**
@@ -35,6 +36,11 @@ export async function uploadDataset(file: File): Promise<UploadResult> {
 export async function getSemanticState(datasetId: string): Promise<SemanticState> {
   const response = await apiFetch<SemanticState>(`/api/datasets/${datasetId}/semantic`);
   return response;
+}
+
+/** Contextual empty-chat starter prompts for the dataset (LLM + server fallback). */
+export async function getStarterQuestions(datasetId: string): Promise<{ starters: StarterQuestionItem[] }> {
+  return apiFetch<{ starters: StarterQuestionItem[] }>(`/api/datasets/${datasetId}/starter-questions`);
 }
 
 export async function getDatasetPreview(

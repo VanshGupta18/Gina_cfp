@@ -21,6 +21,7 @@ import {
   insertSchemaEmbeddings,
 } from '../semantic/embedder.js';
 import { mergeAllProfilerColumns, profilerToEnricherInput } from '../semantic/mergeProfile.js';
+import { generateStarterQuestions } from '../pipeline/starterQuestions.js';
 
 /** Maximum accepted CSV file size: 50 MB (Phase 7 boundary test). */
 export const MAX_CSV_UPLOAD_BYTES = 50 * 1024 * 1024;
@@ -223,6 +224,42 @@ export default async function datasetsRoutes(fastify: FastifyInstance) {
         demoSlug: r.demo_slug,
         createdAt: r.created_at,
       };
+    },
+  );
+
+  // GET /api/datasets/:datasetId/starter-questions — contextual empty-chat prompts (LLM + fallback)
+  fastify.get<{ Params: { datasetId: string } }>(
+    '/datasets/:datasetId/starter-questions',
+    async (request, reply) => {
+      const { datasetId } = request.params;
+
+      const { rows } = await fastify.db.query<{
+        name: string;
+        schema_json: unknown;
+        understanding_card: string | null;
+      }>(
+        `SELECT d.name, ss.schema_json, ss.understanding_card
+         FROM datasets d
+         INNER JOIN semantic_states ss ON ss.dataset_id = d.id
+         WHERE d.id = $1::uuid AND (d.user_id = $2::uuid OR d.is_demo = true)`,
+        [datasetId, request.userId],
+      );
+
+      if (rows.length === 0) {
+        return reply.status(404).send({ error: 'Dataset not found' });
+      }
+
+      const row = rows[0]!;
+      const schema = row.schema_json as StoredSchemaJson | null;
+      const columns = schema?.columns ?? [];
+
+      const starters = await generateStarterQuestions(
+        columns,
+        row.understanding_card ?? schema?.understandingCard ?? '',
+        row.name,
+      );
+
+      return { starters };
     },
   );
 
