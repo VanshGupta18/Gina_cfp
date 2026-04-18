@@ -362,6 +362,17 @@ export default async function datasetsRoutes(fastify: FastifyInstance) {
       const client = await fastify.db.connect();
       try {
         await client.query('BEGIN');
+        // pipeline_runs FKs reference conversations/messages without ON DELETE CASCADE — remove first
+        await client.query(
+          `DELETE FROM pipeline_runs
+           WHERE conversation_id IN (SELECT id FROM conversations WHERE dataset_id = $1::uuid)
+              OR message_id IN (
+                SELECT m.id FROM messages m
+                INNER JOIN conversations c ON c.id = m.conversation_id
+                WHERE c.dataset_id = $1::uuid
+              )`,
+          [datasetId],
+        );
         await client.query(`DROP TABLE IF EXISTS ${quotedIdent(row.data_table_name)}`);
         await client.query(
           `DELETE FROM datasets WHERE id = $1::uuid AND user_id = $2::uuid AND is_demo = false`,
