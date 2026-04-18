@@ -2,6 +2,13 @@
 
 import React, { useState } from 'react';
 import { StandardChartData } from '@/types';
+import { formatChartAxisLabel, formatChartNumber } from '@/lib/charts/formatChartNumber';
+
+function formatCell(v: unknown) {
+  if (typeof v === 'number' && Number.isFinite(v)) return formatChartNumber(v);
+  if (typeof v === 'string') return formatChartAxisLabel(v);
+  return v as React.ReactNode;
+}
 
 export function DataTable({ data, isInline }: { data: StandardChartData; isInline?: boolean }) {
   const [showAll, setShowAll] = useState(false);
@@ -34,7 +41,7 @@ export function DataTable({ data, isInline }: { data: StandardChartData; isInlin
               <tr key={i} className="border-b border-surface-border/50 hover:bg-surface/50 transition-colors last:border-b-0">
                 {row.map((cell, j) => (
                   <td key={j} className="px-6 py-3 whitespace-nowrap">
-                    {cell}
+                    {formatCell(cell)}
                   </td>
                 ))}
               </tr>

@@ -13,9 +13,6 @@ import type { Conversation, Dataset } from '@/types';
 
 interface NonTechSidebarProps {
   onNavigate?: () => void;
-  onViewDataset?: () => void;
-  onSemanticCorrections?: () => void;
-  onDatasetOverview?: () => void;
   isCollapsed?: boolean;
   onToggleCollapse?: () => void;
 }
@@ -33,9 +30,6 @@ interface NonTechSidebarProps {
  */
 export default function NonTechSidebar({
   onNavigate,
-  onViewDataset,
-  onSemanticCorrections,
-  onDatasetOverview,
   isCollapsed = false,
   onToggleCollapse,
 }: NonTechSidebarProps) {
@@ -167,9 +161,6 @@ export default function NonTechSidebar({
         onUpload={handleUpload}
         activeDataset={vm.activeDataset}
         isCreatingChat={vm.isCreatingChat}
-        onViewDataset={onViewDataset}
-        onSemanticCorrections={onSemanticCorrections}
-        onDatasetOverview={onDatasetOverview}
         isCollapsed={isCollapsed}
         onToggleCollapse={onToggleCollapse}
       />

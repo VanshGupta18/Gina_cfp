@@ -2,6 +2,7 @@
 
 import React from 'react';
 import { StandardChartData } from '@/types';
+import { formatChartAxisLabel, formatChartNumber } from '@/lib/charts/formatChartNumber';
 import { 
   LineChart as RechartsLineChart, 
   Line, 
@@ -31,10 +32,23 @@ export function LineChart({ data, isInline }: { data: StandardChartData; isInlin
           margin={isInline ? { top: 5, right: 10, left: 10, bottom: 5 } : { top: 5, right: 30, left: 20, bottom: 5 }}
         >
           <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#2E3D5A" />
-          <XAxis dataKey="name" stroke="#94a3b8" fontSize={isInline ? 10 : 12} tickLine={false} />
-          <YAxis stroke="#94a3b8" fontSize={isInline ? 10 : 12} tickLine={false} />
+          <XAxis
+            dataKey="name"
+            stroke="#94a3b8"
+            fontSize={isInline ? 10 : 12}
+            tickLine={false}
+            tickFormatter={(v) => formatChartAxisLabel(v)}
+          />
+          <YAxis
+            stroke="#94a3b8"
+            fontSize={isInline ? 10 : 12}
+            tickLine={false}
+            tickFormatter={(v) => formatChartNumber(v)}
+          />
           {!isInline && (
-            <Tooltip 
+            <Tooltip
+              formatter={(v) => formatChartNumber(v)}
+              labelFormatter={(label) => formatChartAxisLabel(label)}
               contentStyle={{ backgroundColor: '#1A2235', borderColor: '#2E3D5A', color: '#E8EDF5', borderRadius: '8px' }}
               itemStyle={{ color: '#E8EDF5' }}
             />

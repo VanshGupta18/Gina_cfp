@@ -2,6 +2,7 @@
 
 import React from 'react';
 import { StandardChartData } from '@/types';
+import { formatChartAxisLabel, formatChartNumber } from '@/lib/charts/formatChartNumber';
 import { 
   BarChart as RechartsBarChart, 
   Bar, 
@@ -34,10 +35,26 @@ export function BarChart({ data, isInline }: { data: StandardChartData; isInline
           margin={isInline ? { top: 5, right: 10, left: 10, bottom: 5 } : { top: 5, right: 30, left: 20, bottom: 5 }}
         >
           <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#2E3D5A" />
-          <XAxis type="number" stroke="#94a3b8" fontSize={isInline ? 10 : 12} tickLine={false} />
-          <YAxis dataKey="name" type="category" stroke="#94a3b8" fontSize={isInline ? 10 : 12} tickLine={false} width={isInline ? 60 : 100} />
+          <XAxis
+            type="number"
+            stroke="#94a3b8"
+            fontSize={isInline ? 10 : 12}
+            tickLine={false}
+            tickFormatter={(v) => formatChartNumber(v)}
+          />
+          <YAxis
+            dataKey="name"
+            type="category"
+            stroke="#94a3b8"
+            fontSize={isInline ? 10 : 12}
+            tickLine={false}
+            width={isInline ? 60 : 100}
+            tickFormatter={(v) => formatChartAxisLabel(v)}
+          />
           {!isInline && (
-            <Tooltip 
+            <Tooltip
+              formatter={(v) => formatChartNumber(v)}
+              labelFormatter={(label) => formatChartAxisLabel(label)}
               cursor={{ fill: 'rgba(46, 61, 90, 0.4)' }}
               contentStyle={{ backgroundColor: '#1A2235', borderColor: '#2E3D5A', color: '#E8EDF5', borderRadius: '8px' }}
               itemStyle={{ color: '#E8EDF5' }}

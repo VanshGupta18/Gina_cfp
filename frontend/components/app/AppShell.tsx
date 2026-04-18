@@ -138,14 +138,6 @@ function AppShellContent({ children }: { children: React.ReactNode }) {
             >
               <NonTechSidebar
                 onNavigate={() => setMobileRailOpen(false)}
-                onViewDataset={() => setDatasetSheetOpen(true)}
-                onSemanticCorrections={() => setCorrectionOpen(true)}
-                onDatasetOverview={() => {
-                  if (activeDataset) {
-                    router.push(`/app/dataset/${activeDataset.id}/overview`);
-                    setMobileRailOpen(false);
-                  }
-                }}
                 isCollapsed={sidebarCollapsed}
                 onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
               />
@@ -170,6 +162,15 @@ function AppShellContent({ children }: { children: React.ReactNode }) {
           <DatasetActionsProvider
             onViewDataset={() => setDatasetSheetOpen(true)}
             onSemanticCorrections={() => setCorrectionOpen(true)}
+            onDatasetOverview={() => {
+              if (!activeDataset) return;
+              const m = pathname?.match(/^\/app\/([^/]+)$/);
+              const seg = m?.[1];
+              const fromChat =
+                seg && seg !== 'dataset' ? seg : null;
+              const q = fromChat ? `?from=${encodeURIComponent(fromChat)}` : '';
+              router.push(`/app/dataset/${activeDataset.id}/overview${q}`);
+            }}
           >
             {children}
             

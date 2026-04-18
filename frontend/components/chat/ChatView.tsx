@@ -7,7 +7,7 @@ import { usePipeline } from '@/lib/hooks/usePipeline';
 import { useReasoningToggle } from '@/lib/hooks/useReasoningToggle';
 import { buildSessionContextFromMessages } from '@/lib/chat/sessionContext';
 import { parseRateLimitError } from '@/lib/api/errors';
-import { useDatasetActions } from '@/lib/context/DatasetActionsContext';
+import { DatasetWorkspaceToolbar } from '@/components/app/DatasetWorkspaceToolbar';
 import { CorrectionModal } from '@/components/upload/CorrectionModal';
 import { ChatInput } from './ChatInput';
 import { MessageList } from './MessageList';
@@ -32,7 +32,6 @@ export function ChatView() {
   const { activeConversation, messages, addMessage, refreshConversations } = useConversation();
   const { steps, result, isStreaming, error, runQuery } = usePipeline();
   const { showReasoning } = useReasoningToggle();
-  const { onViewDataset, onSemanticCorrections } = useDatasetActions();
 
   const rateLimitInfo = parseRateLimitError(error);
 
@@ -143,37 +142,7 @@ export function ChatView() {
   if (!activeConversation) {
     return (
       <div className="flex flex-col relative h-full bg-[#0F121A]">
-        <div
-          className="h-20 px-8 flex items-center justify-between sticky top-0 z-10"
-          style={{
-            backdropFilter: 'blur(10px)',
-            WebkitBackdropFilter: 'blur(10px)',
-            background: 'rgba(10, 12, 18, 0.82)',
-            borderBottom: '1px solid rgba(255,255,255,0.06)',
-          }}
-        >
-          <div className="flex items-center gap-3">
-            <h2 className="text-lg font-bold font-serif text-white tracking-wide">{activeDataset.name}</h2>
-          </div>
-          <div className="flex items-center gap-2">
-            {onViewDataset && (
-              <button
-                onClick={onViewDataset}
-                className="inline-flex items-center justify-center rounded-lg border border-white/10 px-3 py-1.5 text-xs font-medium text-slate-300 transition-colors hover:border-white/20 hover:bg-white/5 hover:text-white"
-              >
-                View data
-              </button>
-            )}
-            {onSemanticCorrections && (
-              <button
-                onClick={onSemanticCorrections}
-                className="inline-flex items-center justify-center rounded-lg border border-white/10 px-3 py-1.5 text-xs font-medium text-slate-300 transition-colors hover:border-white/20 hover:bg-white/5 hover:text-white"
-              >
-                Semantic Corrections
-              </button>
-            )}
-          </div>
-        </div>
+        <DatasetWorkspaceToolbar datasetName={activeDataset.name} />
 
         <div className="flex-1 overflow-y-auto pb-32">
           <DatasetWelcome dataset={activeDataset} />
@@ -184,37 +153,7 @@ export function ChatView() {
 
   return (
     <div className="flex flex-col relative h-full bg-[#0F121A]">
-      <div
-        className="h-20 px-8 flex items-center justify-between sticky top-0 z-10"
-        style={{
-          backdropFilter: 'blur(10px)',
-          WebkitBackdropFilter: 'blur(10px)',
-          background: 'rgba(10, 12, 18, 0.82)',
-          borderBottom: '1px solid rgba(255,255,255,0.06)',
-        }}
-      >
-        <div className="flex items-center gap-3">
-          <h2 className="text-lg font-bold font-serif text-white tracking-wide">{activeDataset.name}</h2>
-        </div>
-        <div className="flex items-center gap-2">
-          {onViewDataset && (
-            <button
-              onClick={onViewDataset}
-              className="inline-flex items-center justify-center rounded-lg border border-white/10 px-3 py-1.5 text-xs font-medium text-slate-300 transition-colors hover:border-white/20 hover:bg-white/5 hover:text-white"
-            >
-              View data
-            </button>
-          )}
-          {onSemanticCorrections && (
-            <button
-              onClick={onSemanticCorrections}
-              className="inline-flex items-center justify-center rounded-lg border border-white/10 px-3 py-1.5 text-xs font-medium text-slate-300 transition-colors hover:border-white/20 hover:bg-white/5 hover:text-white"
-            >
-              Semantic Corrections
-            </button>
-          )}
-        </div>
-      </div>
+      <DatasetWorkspaceToolbar datasetName={activeDataset.name} />
 
       <div className="flex-1 overflow-y-auto pb-32">
         {messages.length === 0 ? (
