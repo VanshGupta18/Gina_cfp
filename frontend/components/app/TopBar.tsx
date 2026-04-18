@@ -4,7 +4,7 @@ import React, { useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/hooks/useAuth';
-import { LogOut, Menu, Sparkles } from 'lucide-react';
+import { LogOut, Menu } from 'lucide-react';
 
 interface TopBarProps {
   onMenuClick: () => void;
@@ -50,18 +50,6 @@ export default function TopBar({ onMenuClick }: TopBarProps) {
 
         <Link href="/app" className="group shrink-0 flex items-center gap-2">
           <span className="text-xl font-bold tracking-tight text-white">G.I.N.A</span>
-        </Link>
-
-        {/* Live Demo Badge Link */}
-        <Link
-          href="/live-demo"
-          className="group flex items-center gap-2 rounded-full border border-brand-indigo/30 bg-brand-indigo/10 px-3 py-1 hover:border-brand-indigo/60 hover:bg-brand-indigo/20 transition-all duration-300 shadow-[0_0_10px_rgba(90,78,227,0.1)] hover:shadow-[0_0_16px_rgba(90,78,227,0.25)]"
-        >
-          <span className="relative flex h-2 w-2">
-            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-brand-indigo-light opacity-75"></span>
-            <span className="relative inline-flex rounded-full h-2 w-2 bg-brand-indigo-light"></span>
-          </span>
-          <span className="text-[10px] font-black tracking-[0.15em] text-brand-indigo-light uppercase group-hover:text-white transition-colors">Live Demo</span>
         </Link>
       </div>
 

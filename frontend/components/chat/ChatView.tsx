@@ -8,7 +8,6 @@ import { useReasoningToggle } from '@/lib/hooks/useReasoningToggle';
 import { buildSessionContextFromMessages } from '@/lib/chat/sessionContext';
 import { parseRateLimitError } from '@/lib/api/errors';
 import { useDatasetActions } from '@/lib/context/DatasetActionsContext';
-import DemoBadge from '@/components/sidebar/DemoBadge';
 import { CorrectionModal } from '@/components/upload/CorrectionModal';
 import { ChatInput } from './ChatInput';
 import { MessageList } from './MessageList';
@@ -42,7 +41,7 @@ export function ChatView() {
     [messages],
   );
 
-  const canEditSemantic = !!activeDataset && !activeDataset.isDemo;
+  const canEditSemantic = !!activeDataset;
 
   const openCorrections = () => setCorrectionModalOpen(true);
 
@@ -155,7 +154,6 @@ export function ChatView() {
         >
           <div className="flex items-center gap-3">
             <h2 className="text-lg font-bold font-serif text-white tracking-wide">{activeDataset.name}</h2>
-            {activeDataset.isDemo && <DemoBadge />}
           </div>
           <div className="flex items-center gap-2">
             {onViewDataset && (
@@ -166,7 +164,7 @@ export function ChatView() {
                 View data
               </button>
             )}
-            {onSemanticCorrections && !activeDataset.isDemo && (
+            {onSemanticCorrections && (
               <button
                 onClick={onSemanticCorrections}
                 className="inline-flex items-center justify-center rounded-lg border border-white/10 px-3 py-1.5 text-xs font-medium text-slate-300 transition-colors hover:border-white/20 hover:bg-white/5 hover:text-white"
@@ -197,7 +195,6 @@ export function ChatView() {
       >
         <div className="flex items-center gap-3">
           <h2 className="text-lg font-bold font-serif text-white tracking-wide">{activeDataset.name}</h2>
-          {activeDataset.isDemo && <DemoBadge />}
         </div>
         <div className="flex items-center gap-2">
           {onViewDataset && (
@@ -208,7 +205,7 @@ export function ChatView() {
               View data
             </button>
           )}
-          {onSemanticCorrections && !activeDataset.isDemo && (
+          {onSemanticCorrections && (
             <button
               onClick={onSemanticCorrections}
               className="inline-flex items-center justify-center rounded-lg border border-white/10 px-3 py-1.5 text-xs font-medium text-slate-300 transition-colors hover:border-white/20 hover:bg-white/5 hover:text-white"

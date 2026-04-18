@@ -30,25 +30,26 @@ export function DatasetProvider({ children }: { children: React.ReactNode }) {
     setError(null);
     try {
       const fetchedDatasets = await listDatasets();
-      setDatasets(fetchedDatasets);
+      const userDatasets = fetchedDatasets.filter((d) => !d.isDemo);
+      setDatasets(userDatasets);
 
-      if (fetchedDatasets.length > 0) {
+      if (userDatasets.length > 0) {
         setActiveDatasetState((current) => {
           const stillValid =
-            current && fetchedDatasets.some((d) => d.id === current.id)
-              ? fetchedDatasets.find((d) => d.id === current.id) || current
+            current && userDatasets.some((d) => d.id === current.id)
+              ? userDatasets.find((d) => d.id === current.id) || current
               : null;
           if (stillValid) return stillValid;
 
           if (typeof window !== 'undefined') {
             const saved = sessionStorage.getItem(ACTIVE_DATASET_STORAGE_KEY);
             if (saved) {
-              const fromStorage = fetchedDatasets.find((d) => d.id === saved);
+              const fromStorage = userDatasets.find((d) => d.id === saved);
               if (fromStorage) return fromStorage;
             }
           }
 
-          // Do not auto-pick a demo or first dataset — user chooses on the welcome screen
+          // Do not auto-pick the first dataset — user chooses on the welcome screen
           return null;
         });
       } else {

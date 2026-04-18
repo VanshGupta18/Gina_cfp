@@ -62,7 +62,7 @@ export function DatasetNode({
   const menuRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const canMutateDataset = !dataset.isDemo && (onRenameDataset || onDeleteDataset);
+  const canMutateDataset = !!(onRenameDataset || onDeleteDataset);
 
   useEffect(() => {
     if (isEditingName && inputRef.current) {

@@ -5,7 +5,6 @@ import { useRouter } from 'next/navigation';
 import type { Dataset } from '@/types';
 import { useDatasets } from '@/lib/hooks/useDatasets';
 import { useUploadModal } from '@/lib/hooks/useUploadModal';
-import DemoBadge from '@/components/sidebar/DemoBadge';
 import { listConversations, createConversation } from '@/lib/api/conversations';
 import {
   Database,
@@ -21,9 +20,6 @@ export default function WorkspaceWelcome() {
   const { datasets, setActiveDataset } = useDatasets();
   const { openUploadModal } = useUploadModal();
   const [openingId, setOpeningId] = useState<string | null>(null);
-
-  const demoDatasets = datasets.filter((d) => d.isDemo);
-  const userDatasets = datasets.filter((d) => !d.isDemo);
 
   const openDataset = async (d: Dataset) => {
     setOpeningId(d.id);
@@ -121,7 +117,7 @@ export default function WorkspaceWelcome() {
                 </span>
               </h1>
               <p className="mt-6 text-lg md:text-xl leading-relaxed text-slate-300 font-medium">
-                Upload your own CSV or explore demo datasets to start asking questions in plain English. Get instant, AI-powered insights without writing a single line of SQL.
+                Upload a CSV and start asking questions in plain English. Get instant, AI-powered insights without writing a single line of SQL.
               </p>
             </div>
 
@@ -414,7 +410,7 @@ export default function WorkspaceWelcome() {
               Your datasets
             </span>
           </h2>
-          {userDatasets.length === 0 ? (
+          {datasets.length === 0 ? (
             <div
               className="rounded-2xl px-5 py-12 text-center transition-all duration-300 hover:shadow-lg"
               style={{
@@ -439,7 +435,7 @@ export default function WorkspaceWelcome() {
             </div>
           ) : (
             <ul className="grid gap-3 sm:grid-cols-2">
-              {userDatasets.map((d) => (
+              {datasets.map((d) => (
                 <li key={d.id}>
                   <button
                     type="button"
@@ -495,80 +491,6 @@ export default function WorkspaceWelcome() {
             </ul>
           )}
         </section>
-
-        {/* Demo datasets */}
-        {demoDatasets.length > 0 && (
-          <section className="mt-20">
-            <h2 className="mb-6 flex items-center gap-3">
-              <span
-                className="h-5 w-0.5 rounded-full"
-                style={{ background: 'linear-gradient(to bottom, #5A4EE3, #3CE0D6)' }}
-              />
-              <Database className="h-4 w-4 text-slate-600" />
-              <span className="text-[11px] font-bold uppercase tracking-[0.2em] text-slate-400">
-                Try demo datasets
-              </span>
-            </h2>
-            <ul className="grid gap-3 sm:grid-cols-2">
-              {demoDatasets.map((d) => (
-                <li key={d.id}>
-                  <button
-                    type="button"
-                    onClick={() => void openDataset(d)}
-                    disabled={openingId !== null}
-                    className="group flex w-full items-start gap-3 rounded-2xl p-5 text-left disabled:opacity-60 transition-all duration-300 hover:shadow-xl"
-                    style={{
-                      background: 'rgba(255,255,255,0.05)',
-                      backdropFilter: 'blur(12px)',
-                      WebkitBackdropFilter: 'blur(12px)',
-                      border: '1px solid rgba(255,255,255,0.08)',
-                    }}
-                    onMouseEnter={(e) => {
-                      (e.currentTarget as HTMLButtonElement).style.background = 'rgba(255,255,255,0.08)';
-                      (e.currentTarget as HTMLButtonElement).style.borderColor = 'rgba(90,78,227,0.3)';
-                    }}
-                    onMouseLeave={(e) => {
-                      (e.currentTarget as HTMLButtonElement).style.background = 'rgba(255,255,255,0.05)';
-                      (e.currentTarget as HTMLButtonElement).style.borderColor = 'rgba(255,255,255,0.08)';
-                    }}
-                  >
-                    <div
-                      className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl"
-                      style={{
-                        background: 'rgba(90,78,227,0.13)',
-                        border: '1px solid rgba(90,78,227,0.2)',
-                      }}
-                    >
-                      <MessageSquare className="h-5 w-5 text-brand-indigo-light" />
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2">
-                        <span className="truncate font-semibold text-slate-100">{d.name}</span>
-                        <DemoBadge />
-                      </div>
-                      <p className="mt-1 text-xs text-slate-500">
-                        {d.rowCount != null ? `${d.rowCount.toLocaleString()} rows` : 'Sample data'} · try questions instantly
-                      </p>
-                      <span className="mt-2.5 inline-flex items-center gap-1 text-xs font-semibold text-brand-indigo-light group-hover:text-white transition-colors duration-150">
-                        {openingId === d.id ? (
-                          <>
-                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                            Opening…
-                          </>
-                        ) : (
-                          <>
-                            Open dataset
-                            <ChevronRight className="h-3.5 w-3.5 transition-transform duration-150 group-hover:translate-x-1" />
-                          </>
-                        )}
-                      </span>
-                    </div>
-                  </button>
-                </li>
-              ))}
-            </ul>
-          </section>
-        )}
       </div>
     </div>
   );

@@ -37,7 +37,7 @@ export async function getHealth(): Promise<{ status: string }> {
   }
 }
 
-/** `POST /api/snapshot/toggle` — toggles in-memory demo snapshot mode (requires auth). */
+/** `POST /api/snapshot/toggle` — toggles in-memory snapshot mode (requires auth). */
 export async function postSnapshotToggle(): Promise<{ snapshotMode: boolean }> {
   return apiFetch<{ snapshotMode: boolean }>('/api/snapshot/toggle', {
     method: 'POST',

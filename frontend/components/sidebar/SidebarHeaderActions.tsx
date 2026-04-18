@@ -29,7 +29,7 @@ export function SidebarHeaderActions({
 }: SidebarHeaderActionsProps) {
   const canCreateChat = activeDataset !== null;
   const canDatasetTools = activeDataset !== null;
-  const canCorrections = canDatasetTools && activeDataset && !activeDataset.isDemo;
+  const canCorrections = canDatasetTools && activeDataset;
 
   return (
     <div

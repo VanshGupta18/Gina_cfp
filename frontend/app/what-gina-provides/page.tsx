@@ -92,16 +92,6 @@ export default function WhatGinaProvides() {
           <Link href="/" className="text-xl font-bold tracking-tight text-white">
             G.I.N.A
           </Link>
-          <Link
-            href="/live-demo"
-            className="group flex items-center gap-2 rounded-full border border-brand-indigo/30 bg-brand-indigo/10 px-3 py-1 hover:border-brand-indigo/60 hover:bg-brand-indigo/20 transition-all duration-300 shadow-[0_0_10px_rgba(90,78,227,0.1)] hover:shadow-[0_0_16px_rgba(90,78,227,0.25)]"
-          >
-            <span className="relative flex h-2 w-2">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-brand-indigo-light opacity-75"></span>
-              <span className="relative inline-flex rounded-full h-2 w-2 bg-brand-indigo-light"></span>
-            </span>
-            <span className="text-[10px] font-black tracking-[0.15em] text-brand-indigo-light uppercase group-hover:text-white transition-colors">Live Demo</span>
-          </Link>
         </div>
         <div className="flex items-center gap-6">
           <Link
@@ -245,10 +235,10 @@ export default function WhatGinaProvides() {
                 Get started for free
               </button>
               <Link
-                href="/live-demo"
+                href="/how-it-works"
                 className="flex items-center gap-2 text-slate-300 hover:text-white border border-surface-border px-8 py-4 rounded-lg text-sm font-medium transition-colors hover:border-white/20"
               >
-                See Live Demo
+                How it works
                 <ArrowRight className="w-4 h-4" />
               </Link>
             </div>

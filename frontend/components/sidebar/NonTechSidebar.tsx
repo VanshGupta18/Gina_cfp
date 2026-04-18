@@ -86,7 +86,6 @@ export default function NonTechSidebar({
 
   const handleRenameDataset = useCallback(
     (dataset: Dataset, newName: string) => {
-      if (dataset.isDemo) return;
       void (async () => {
         setSidebarMutating(true);
         try {
@@ -104,7 +103,6 @@ export default function NonTechSidebar({
 
   const handleDeleteDataset = useCallback(
     (dataset: Dataset) => {
-      if (dataset.isDemo) return;
       showDeleteConfirm(dataset, 'dataset', async () => {
         setSidebarMutating(true);
         try {
