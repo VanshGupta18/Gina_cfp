@@ -6,6 +6,7 @@ import type {
   SemanticCorrection,
   DatasetPreviewResponse,
   StarterQuestionItem,
+  DatasetOverviewApiResponse,
 } from '@/types';
 
 /**
@@ -78,4 +79,8 @@ export async function deleteDataset(datasetId: string): Promise<void> {
   await apiFetch<{ ok: boolean }>(`/api/datasets/${datasetId}`, {
     method: 'DELETE',
   });
+}
+
+export async function getDatasetOverview(datasetId: string): Promise<DatasetOverviewApiResponse> {
+  return apiFetch<DatasetOverviewApiResponse>(`/api/datasets/${datasetId}/overview`);
 }

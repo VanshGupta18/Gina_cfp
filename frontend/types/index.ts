@@ -231,3 +231,30 @@ export interface SemanticStateResponse {
   understandingCard: string;
   isUserCorrected: boolean;
 }
+
+/** GET /api/datasets/:datasetId/overview — persisted payload when status is ready */
+export interface DatasetOverviewStored {
+  version: 1;
+  executiveSummary: string;
+  highlights: string[];
+  charts: Array<{
+    title: string;
+    insight?: string;
+    chartType: ChartType;
+    chartData: ChartData;
+  }>;
+  statsHeadline?: {
+    rowCount: number;
+    columnCount: number;
+  };
+}
+
+export type DatasetOverviewApiResponse =
+  | { status: 'pending' }
+  | { status: 'failed'; error: string }
+  | {
+      status: 'ready';
+      overview: unknown;
+      overviewModel: string | null;
+      generatedAt: string | null;
+    };

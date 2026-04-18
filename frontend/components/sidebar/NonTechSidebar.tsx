@@ -14,6 +14,7 @@ interface NonTechSidebarProps {
   onNavigate?: () => void;
   onViewDataset?: () => void;
   onSemanticCorrections?: () => void;
+  onDatasetOverview?: () => void;
 }
 
 /**
@@ -31,6 +32,7 @@ export default function NonTechSidebar({
   onNavigate,
   onViewDataset,
   onSemanticCorrections,
+  onDatasetOverview,
 }: NonTechSidebarProps) {
   const router = useRouter();
   const vm = useSidebarViewModel();
@@ -189,6 +191,7 @@ export default function NonTechSidebar({
         isCreatingChat={vm.isCreatingChat}
         onViewDataset={onViewDataset}
         onSemanticCorrections={onSemanticCorrections}
+        onDatasetOverview={onDatasetOverview}
       />
 
       {/* Main Content Area */}

@@ -10,6 +10,7 @@ interface SidebarHeaderActionsProps {
   isCreatingChat: boolean;
   onViewDataset?: () => void;
   onSemanticCorrections?: () => void;
+  onDatasetOverview?: () => void;
 }
 
 export function SidebarHeaderActions({
@@ -19,6 +20,7 @@ export function SidebarHeaderActions({
   isCreatingChat,
   onViewDataset,
   onSemanticCorrections,
+  onDatasetOverview,
 }: SidebarHeaderActionsProps) {
   const canCreateChat = activeDataset !== null;
   const canDatasetTools = activeDataset !== null;
@@ -68,6 +70,16 @@ export function SidebarHeaderActions({
           <span className="mr-1">📤</span>
           Upload Dataset
         </button>
+
+        {canDatasetTools && onDatasetOverview && (
+          <button
+            type="button"
+            onClick={onDatasetOverview}
+            className="inline-flex items-center justify-center rounded-lg border border-brand-teal/25 px-3 py-1.5 text-xs font-medium text-brand-teal transition-colors hover:border-brand-teal/50 hover:bg-brand-teal/10"
+          >
+            Dataset overview
+          </button>
+        )}
 
         {canDatasetTools && onViewDataset && (
           <button

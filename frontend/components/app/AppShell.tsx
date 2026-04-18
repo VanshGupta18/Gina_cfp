@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import TopBar from './TopBar';
 import NonTechSidebar from '@/components/sidebar/NonTechSidebar';
 import InsightPanel from './InsightPanel';
@@ -11,6 +11,7 @@ import { useDatasets } from '@/lib/hooks/useDatasets';
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const router = useRouter();
   const [mobileRailOpen, setMobileRailOpen] = useState(false);
   const [correctionOpen, setCorrectionOpen] = useState(false);
   const [datasetSheetOpen, setDatasetSheetOpen] = useState(false);
@@ -44,6 +45,12 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
               onNavigate={() => setMobileRailOpen(false)}
               onViewDataset={() => setDatasetSheetOpen(true)}
               onSemanticCorrections={() => setCorrectionOpen(true)}
+              onDatasetOverview={() => {
+                if (activeDataset) {
+                  router.push(`/app/dataset/${activeDataset.id}/overview`);
+                  setMobileRailOpen(false);
+                }
+              }}
             />
           </aside>
         )}
