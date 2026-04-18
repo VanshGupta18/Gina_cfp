@@ -140,16 +140,45 @@ export default async function conversationsRoutes(fastify: FastifyInstance) {
     async (request, reply) => {
       const { conversationId } = request.params;
 
-      const { rowCount } = await fastify.db.query(
-        `DELETE FROM conversations WHERE id = $1::uuid AND user_id = $2::uuid`,
-        [conversationId, request.userId],
-      );
+      const client = await fastify.db.connect();
+      try {
+        await client.query('BEGIN');
 
-      if (rowCount === 0) {
-        return reply.status(404).send({ error: 'Conversation not found' });
+        const own = await client.query(
+          `SELECT 1 FROM conversations WHERE id = $1::uuid AND user_id = $2::uuid`,
+          [conversationId, request.userId],
+        );
+        if (own.rowCount === 0) {
+          await client.query('ROLLBACK');
+          return reply.status(404).send({ error: 'Conversation not found' });
+        }
+
+        // pipeline_runs FKs reference conversations/messages without ON DELETE CASCADE — remove first
+        await client.query(
+          `DELETE FROM pipeline_runs
+           WHERE conversation_id = $1::uuid
+              OR message_id IN (SELECT id FROM messages WHERE conversation_id = $1::uuid)`,
+          [conversationId],
+        );
+
+        const { rowCount } = await client.query(
+          `DELETE FROM conversations WHERE id = $1::uuid AND user_id = $2::uuid`,
+          [conversationId, request.userId],
+        );
+
+        await client.query('COMMIT');
+
+        if (rowCount === 0) {
+          return reply.status(404).send({ error: 'Conversation not found' });
+        }
+
+        return reply.status(200).send({ ok: true });
+      } catch (err) {
+        await client.query('ROLLBACK').catch(() => {});
+        throw err;
+      } finally {
+        client.release();
       }
-
-      return reply.status(200).send({ ok: true });
     },
   );
 }
