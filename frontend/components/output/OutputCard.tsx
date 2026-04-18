@@ -57,11 +57,12 @@ function hasChartData(chartType?: ChartType, chartData?: ChartData): boolean {
 }
 
 function OutputCardImpl({ payload, onCorrectionClick }: OutputCardProps) {
-  const { openInsightWithAll, registerChart, sessionCharts } = useUIState();
+  const { openInsightWithAll, registerChart, sessionCharts, insightPanelOpen } = useUIState();
   const [isExpanded, setIsExpanded] = useState(false);
 
   const hasChart = hasChartData(payload.chartType, payload.chartData);
   const isGraphical = hasChart && payload.chartType !== 'table';
+  const shouldCollapseChartInChat = hasChart && insightPanelOpen;
 
   useEffect(() => {
     if (hasChart) {
@@ -117,7 +118,7 @@ function OutputCardImpl({ payload, onCorrectionClick }: OutputCardProps) {
           <NarrativeText text={payload.narrative} />
         </div>
 
-        {hasChart && (
+        {hasChart && !shouldCollapseChartInChat && (
           <div
             className="relative mt-4 pt-4 group"
             style={{ borderTop: '1px solid rgba(255,255,255,0.06)' }}

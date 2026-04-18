@@ -11,7 +11,9 @@ import {
   ChevronLeft,
   ChevronRight,
   Database,
+  Download,
 } from 'lucide-react';
+import { toPng } from 'html-to-image';
 import type { ChartType, QueryResultTable } from '@/types';
 import { useUIState } from '@/lib/providers/UIStateProvider';
 import type { PinnedChartState } from '@/lib/providers/UIStateProvider';
@@ -83,8 +85,10 @@ function SqlResultTable({
           <thead
             className="sticky top-0 z-10"
             style={{
-              background: 'rgba(18,22,32,0.95)',
-              boxShadow: '0 1px 0 rgba(255,255,255,0.06)',
+              backdropFilter: 'blur(10px)',
+              WebkitBackdropFilter: 'blur(10px)',
+              background: 'rgba(10, 12, 18, 0.82)',
+              borderBottom: '1px solid rgba(255,255,255,0.06)',
             }}
           >
             <tr>
@@ -128,7 +132,9 @@ export default function InsightPanel() {
   const [panelWidth, setPanelWidth] = useState(400);
   const [currentChartIndex, setCurrentChartIndex] = useState(0);
   const [insightTab, setInsightTab] = useState<'chart' | 'data'>('chart');
+  const [isExportingChart, setIsExportingChart] = useState(false);
   const isResizing = useRef(false);
+  const chartExportRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
@@ -184,6 +190,36 @@ export default function InsightPanel() {
   const hasResultGrid =
     Boolean(insightToDisplay?.resultTable && insightToDisplay.resultTable.columns.length > 0);
 
+  const handleExportChartAsPng = async () => {
+    if (!insightToDisplay || !chartExportRef.current) {
+      return;
+    }
+
+    try {
+      setIsExportingChart(true);
+
+      const dataUrl = await toPng(chartExportRef.current, {
+        cacheBust: true,
+        pixelRatio: 2,
+        backgroundColor: '#121620',
+      });
+
+      const safeTitle = (insightToDisplay.title ?? chartTypeLabel(insightToDisplay.type))
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/(^-|-$)/g, '');
+
+      const link = document.createElement('a');
+      link.href = dataUrl;
+      link.download = `gina-${safeTitle || 'insight-chart'}.png`;
+      link.click();
+    } catch (error) {
+      console.error('Failed to export chart as PNG:', error);
+    } finally {
+      setIsExportingChart(false);
+    }
+  };
+
   return (
     <>
       {insightPanelOpen && (
@@ -214,8 +250,13 @@ export default function InsightPanel() {
 
         <div style={{ width: `${panelWidth}px` }} className="flex flex-col h-full overflow-hidden">
           <div
-            className="flex shrink-0 items-center gap-3 px-5 py-4"
-            style={{ borderBottom: '1px solid rgba(255,255,255,0.07)' }}
+            className="h-20 flex shrink-0 items-center gap-3 px-8 sticky top-0 z-10"
+            style={{
+              backdropFilter: 'blur(10px)',
+              WebkitBackdropFilter: 'blur(10px)',
+              background: 'rgba(10, 12, 18, 0.82)',
+              borderBottom: '1px solid rgba(255,255,255,0.06)',
+            }}
           >
             {insightToDisplay && (
               <div
@@ -238,11 +279,6 @@ export default function InsightPanel() {
                 {insightToDisplay?.title ??
                   (insightToDisplay ? chartTypeLabel(insightToDisplay.type) : 'No insight')}
               </p>
-              {insightToDisplay?.explanation ? (
-                <p className="mt-1 line-clamp-3 text-[11px] leading-relaxed text-slate-500">
-                  {insightToDisplay.explanation}
-                </p>
-              ) : null}
             </div>
 
             {hasMultipleCharts && (
@@ -308,7 +344,7 @@ export default function InsightPanel() {
 
                 {insightTab === 'chart' ? (
                   <>
-                    <div className="mb-4 flex items-center gap-2">
+                    <div className="mb-4 flex items-center justify-between gap-2">
                       <span
                         className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-widest"
                         style={{
@@ -320,8 +356,20 @@ export default function InsightPanel() {
                         <ChartTypeIcon type={insightToDisplay.type} />
                         {chartTypeLabel(insightToDisplay.type)}
                       </span>
+
+                      <button
+                        type="button"
+                        onClick={() => void handleExportChartAsPng()}
+                        disabled={isExportingChart}
+                        className="inline-flex items-center gap-1.5 rounded-md border border-white/10 px-2.5 py-1.5 text-[11px] font-semibold text-slate-300 transition-colors hover:border-white/20 hover:bg-white/5 hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
+                        aria-label="Export chart as PNG"
+                      >
+                        <Download className="h-3.5 w-3.5" />
+                        {isExportingChart ? 'Exporting...' : 'Export PNG'}
+                      </button>
                     </div>
                     <div
+                      ref={chartExportRef}
                       className="min-h-0 flex-1 overflow-auto rounded-xl p-4"
                       style={{
                         background: 'rgba(18,22,32,0.8)',
@@ -347,10 +395,6 @@ export default function InsightPanel() {
                     </p>
                   </div>
                 )}
-
-                <p className="mt-5 shrink-0 text-xs text-white/20 text-center">
-                  Click &quot;View in Insights&quot; on a chart in the conversation to open this panel.
-                </p>
               </div>
             ) : (
               <div className="flex flex-1 flex-col items-center justify-center gap-4 text-center">
