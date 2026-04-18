@@ -15,7 +15,62 @@ interface ChartRendererProps {
   isInline?: boolean;
 }
 
+function isStandardChartData(data: ChartData): data is StandardChartData {
+  return 'labels' in data && 'datasets' in data;
+}
+
+function countPlottedPointSlots(data: StandardChartData): number {
+  const slotCount = Math.max(
+    data.labels.length,
+    ...data.datasets.map((dataset) => dataset.data.length),
+  );
+
+  let plottedSlots = 0;
+
+  for (let index = 0; index < slotCount; index += 1) {
+    const hasFiniteValueAtIndex = data.datasets.some((dataset) =>
+      Number.isFinite(dataset.data[index]),
+    );
+
+    if (hasFiniteValueAtIndex) {
+      plottedSlots += 1;
+    }
+  }
+
+  return plottedSlots;
+}
+
+export function hasRenderableChart(type: ChartType, data: ChartData): boolean {
+  if (type === 'big_number') {
+    return true;
+  }
+
+  if (!isStandardChartData(data)) {
+    return false;
+  }
+
+  const hasLabels = data.labels.length > 0;
+  const hasDatasets = data.datasets.length > 0;
+  const hasAnyValues = data.datasets.some((dataset) => dataset.data.length > 0);
+
+  if (!hasLabels || !hasDatasets || !hasAnyValues) {
+    return false;
+  }
+
+  // Table should render with at least one row-like value; for graphical charts require >1 point.
+  if (type === 'table') {
+    return true;
+  }
+
+  // Require at least two plotted x-axis slots; one slot is effectively a single datapoint chart.
+  return countPlottedPointSlots(data) > 1;
+}
+
 export function renderChart(type: ChartType, data: ChartData, isInline?: boolean) {
+  if (!hasRenderableChart(type, data)) {
+    return null;
+  }
+
   switch (type) {
     case 'big_number': {
       const d = data as unknown as BigNumberChartData;

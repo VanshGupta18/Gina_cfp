@@ -1,7 +1,7 @@
 'use client';
 
-import React, { memo, useState, useEffect } from 'react';
-import { OutputPayload, ChartData, StandardChartData, BigNumberChartData, ChartType } from '@/types';
+import React, { memo, useState, useEffect, useMemo } from 'react';
+import { OutputPayload, ChartData, ChartType } from '@/types';
 import { Maximize2, ChevronDown, ChevronUp } from 'lucide-react';
 import { useUIState } from '@/lib/providers/UIStateProvider';
 
@@ -10,7 +10,7 @@ import { NarrativeText } from './NarrativeText';
 import { CitationChips } from './CitationChips';
 import { SQLExpand } from './SQLExpand';
 import { FollowUpSuggestions } from './FollowUpSuggestions';
-import ChartRenderer from '../charts/ChartRenderer';
+import ChartRenderer, { hasRenderableChart } from '../charts/ChartRenderer';
 
 export interface OutputCardProps {
   payload: OutputPayload;
@@ -29,14 +29,6 @@ function chartLabel(type: ChartType): string {
   }
 }
 
-function isStandardChartData(chartData: ChartData): chartData is StandardChartData {
-  return 'labels' in chartData && 'datasets' in chartData;
-}
-
-function isBigNumberChartData(chartData: ChartData): chartData is BigNumberChartData {
-  return 'value' in chartData;
-}
-
 function hasChartData(chartType?: ChartType, chartData?: ChartData): boolean {
   if (!chartType || !chartData) return false;
 
@@ -45,20 +37,17 @@ function hasChartData(chartType?: ChartType, chartData?: ChartData): boolean {
     return false;
   }
 
-  if (!isStandardChartData(chartData)) {
-    return false;
-  }
-
-  const hasLabels = chartData.labels.length > 0;
-  const hasDatasets = chartData.datasets.length > 0;
-  const hasValues = chartData.datasets.some((dataset) => dataset.data.length > 0);
-
-  return hasLabels && hasDatasets && hasValues;
+  return hasRenderableChart(chartType, chartData);
 }
 
 function OutputCardImpl({ payload, onCorrectionClick }: OutputCardProps) {
   const { openInsightWithAll, registerChart, sessionCharts, insightPanelOpen } = useUIState();
   const [isExpanded, setIsExpanded] = useState(false);
+
+  const renderableSessionCharts = useMemo(
+    () => sessionCharts.filter((chart) => hasRenderableChart(chart.type, chart.data)),
+    [sessionCharts],
+  );
 
   const hasChart = hasChartData(payload.chartType, payload.chartData);
   const isGraphical = hasChart && payload.chartType !== 'table';
@@ -88,15 +77,15 @@ function OutputCardImpl({ payload, onCorrectionClick }: OutputCardProps) {
   ]);
 
   const handleOpenAllCharts = () => {
-    if (sessionCharts.length > 0) {
-      const activeIndex = sessionCharts.findIndex(
+    if (renderableSessionCharts.length > 0) {
+      const activeIndex = renderableSessionCharts.findIndex(
         (c) =>
           (c.id && c.id === payload.messageId) ||
           (!payload.messageId &&
             c.type === payload.chartType &&
             JSON.stringify(c.data) === JSON.stringify(payload.chartData)),
       );
-      openInsightWithAll(sessionCharts, Math.max(0, activeIndex));
+      openInsightWithAll(renderableSessionCharts, Math.max(0, activeIndex));
     }
   };
 
@@ -140,7 +129,11 @@ function OutputCardImpl({ payload, onCorrectionClick }: OutputCardProps) {
                 type="button"
                 onClick={handleOpenAllCharts}
                 className="absolute top-4 right-4 p-2 rounded-lg bg-slate-800/80 border border-white/10 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-slate-700 z-10"
-                title={sessionCharts.length > 1 ? `View all ${sessionCharts.length} charts` : 'View in Insights'}
+                title={
+                  renderableSessionCharts.length > 1
+                    ? `View all ${renderableSessionCharts.length} charts`
+                    : 'View in Insights'
+                }
               >
                 <Maximize2 className="w-4 h-4 text-white" />
               </button>

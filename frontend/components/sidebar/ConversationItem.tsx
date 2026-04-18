@@ -98,10 +98,13 @@ export default function ConversationItem({ conversation, onAfterNavigate }: Conv
             setIsEditing(false);
           }
         }}
-        className="w-full rounded-lg px-3 py-2 text-sm text-white focus:outline-none"
+        className={clsx(
+          'w-full rounded-lg px-3 py-2 text-sm bg-transparent border border-transparent focus:outline-none focus:ring-0 focus-visible:ring-0',
+          isActive ? 'text-white' : 'text-slate-400',
+        )}
         style={{
-          background: 'rgba(28, 33, 46, 0.9)',
-          border: '1px solid rgba(90,78,227,0.5)',
+          background: 'transparent',
+          border: '1px solid transparent',
         }}
       />
     );

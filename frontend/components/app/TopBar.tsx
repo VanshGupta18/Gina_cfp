@@ -4,13 +4,21 @@ import React, { useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/hooks/useAuth';
-import { LogOut, Menu } from 'lucide-react';
+import { LogOut, Menu, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
 
 interface TopBarProps {
   onMenuClick: () => void;
+  showSidebarToggle?: boolean;
+  sidebarCollapsed?: boolean;
+  onToggleSidebarCollapse?: () => void;
 }
 
-export default function TopBar({ onMenuClick }: TopBarProps) {
+export default function TopBar({
+  onMenuClick,
+  showSidebarToggle = false,
+  sidebarCollapsed = false,
+  onToggleSidebarCollapse,
+}: TopBarProps) {
   const router = useRouter();
   const { user, signOut } = useAuth();
   const [userMenuOpen, setUserMenuOpen] = useState(false);
@@ -47,6 +55,22 @@ export default function TopBar({ onMenuClick }: TopBarProps) {
         >
           <Menu className="h-5 w-5" />
         </button>
+
+        {showSidebarToggle && onToggleSidebarCollapse && (
+          <button
+            type="button"
+            onClick={onToggleSidebarCollapse}
+            className="hidden h-9 w-9 shrink-0 items-center justify-center rounded-lg text-slate-300 transition-colors hover:bg-white/5 hover:text-white md:-ml-6 md:flex"
+            title={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+            aria-label={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+          >
+            {sidebarCollapsed ? (
+              <PanelLeftOpen className="h-5 w-5" />
+            ) : (
+              <PanelLeftClose className="h-5 w-5" />
+            )}
+          </button>
+        )}
 
         <Link href="/app" className="group shrink-0 flex items-center gap-2">
           <span className="text-xl font-bold tracking-tight text-white">G.I.N.A</span>

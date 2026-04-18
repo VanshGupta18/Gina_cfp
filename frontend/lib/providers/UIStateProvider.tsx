@@ -5,6 +5,7 @@ import { usePathname } from 'next/navigation';
 import type { ChartType, ChartData, QueryResultTable } from '@/types';
 import { postSnapshotToggle } from '@/lib/api/debug';
 import { useToast } from '@/lib/providers/ToastProvider';
+import { hasRenderableChart } from '@/components/charts/ChartRenderer';
 
 export interface PinnedChartState {
   type: ChartType;
@@ -48,7 +49,16 @@ export function UIStateProvider({ children }: { children: React.ReactNode }) {
     setInsightPanelOpen(false);
   }, [pathname]);
 
+  const isRenderablePinnedChart = useCallback(
+    (chart: PinnedChartState) => hasRenderableChart(chart.type, chart.data),
+    [],
+  );
+
   const registerChart = useCallback((chart: PinnedChartState) => {
+    if (!isRenderablePinnedChart(chart)) {
+      return;
+    }
+
     const chartWithId = {
       ...chart,
       id: chart.id || `chart-${Date.now()}-${Math.random()}`,
@@ -71,26 +81,55 @@ export function UIStateProvider({ children }: { children: React.ReactNode }) {
       );
       return exists ? prev : [...prev, chartWithId];
     });
-  }, []);
+  }, [isRenderablePinnedChart]);
 
   const openInsight = useCallback((type: ChartType, data: ChartData, title?: string) => {
+    if (!hasRenderableChart(type, data)) {
+      setActiveInsight(null);
+      setInsightPanelOpen(false);
+      return;
+    }
+
     setActiveInsight({ type, data, title } as PinnedChartState);
     setInsightPanelOpen(true);
   }, []);
 
   const openInsightWithAll = useCallback((charts: PinnedChartState[], activeIndex?: number) => {
-    setSessionCharts(
-      charts.map((c, idx) => ({
-        ...c,
-        id: c.id || `chart-${Date.now()}-${idx}`,
-      })),
-    );
-    const idx = activeIndex ?? 0;
-    if (charts[idx]) {
-      setActiveInsight(charts[idx]);
+    const renderableCharts = charts.filter(isRenderablePinnedChart);
+
+    if (renderableCharts.length === 0) {
+      setSessionCharts([]);
+      setActiveInsight(null);
+      setInsightPanelOpen(false);
+      return;
     }
+
+    const chartsWithIds = renderableCharts.map((c, idx) => ({
+      ...c,
+      id: c.id || `chart-${Date.now()}-${idx}`,
+    }));
+
+    setSessionCharts(chartsWithIds);
+
+    const preferred = charts[activeIndex ?? 0];
+    let resolvedActiveIndex = 0;
+
+    if (preferred) {
+      resolvedActiveIndex = Math.max(
+        0,
+        chartsWithIds.findIndex(
+          (c) =>
+            (preferred.id && c.id === preferred.id) ||
+            (!preferred.id &&
+              c.type === preferred.type &&
+              JSON.stringify(c.data) === JSON.stringify(preferred.data)),
+        ),
+      );
+    }
+
+    setActiveInsight(chartsWithIds[resolvedActiveIndex]);
     setInsightPanelOpen(true);
-  }, []);
+  }, [isRenderablePinnedChart]);
 
   const closeInsight = useCallback(() => {
     setInsightPanelOpen(false);

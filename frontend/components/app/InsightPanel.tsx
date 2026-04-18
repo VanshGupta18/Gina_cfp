@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   X,
   BarChart2,
@@ -18,7 +18,7 @@ import type { ChartType, QueryResultTable } from '@/types';
 import { useUIState } from '@/lib/providers/UIStateProvider';
 import type { PinnedChartState } from '@/lib/providers/UIStateProvider';
 
-import { renderChart } from '../charts/ChartRenderer';
+import { renderChart, hasRenderableChart } from '../charts/ChartRenderer';
 
 function ChartTypeIcon({ type }: { type: ChartType }) {
   const cls = 'w-4 h-4';
@@ -136,6 +136,16 @@ export default function InsightPanel() {
   const isResizing = useRef(false);
   const chartExportRef = useRef<HTMLDivElement>(null);
 
+  const renderableSessionCharts = useMemo(
+    () => sessionCharts.filter((chart) => hasRenderableChart(chart.type, chart.data)),
+    [sessionCharts],
+  );
+
+  const renderableActiveInsight = useMemo(() => {
+    if (!activeInsight) return null;
+    return hasRenderableChart(activeInsight.type, activeInsight.data) ? activeInsight : null;
+  }, [activeInsight]);
+
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
       if (!isResizing.current) return;
@@ -166,10 +176,32 @@ export default function InsightPanel() {
     document.body.style.cursor = 'col-resize';
   };
 
-  const hasMultipleCharts = sessionCharts.length > 1;
+  const hasMultipleCharts = renderableSessionCharts.length > 1;
   const insightToDisplay: PinnedChartState | null = hasMultipleCharts
-    ? sessionCharts[currentChartIndex] ?? null
-    : activeInsight;
+    ? renderableSessionCharts[currentChartIndex] ?? null
+    : renderableActiveInsight;
+
+  useEffect(() => {
+    if (!activeInsight || renderableSessionCharts.length === 0) return;
+
+    const matchingIndex = renderableSessionCharts.findIndex(
+      (chart) =>
+        (activeInsight.id && chart.id === activeInsight.id) ||
+        (!activeInsight.id &&
+          chart.type === activeInsight.type &&
+          JSON.stringify(chart.data) === JSON.stringify(activeInsight.data)),
+    );
+
+    if (matchingIndex >= 0 && matchingIndex !== currentChartIndex) {
+      setCurrentChartIndex(matchingIndex);
+    }
+  }, [activeInsight, renderableSessionCharts, currentChartIndex]);
+
+  useEffect(() => {
+    if (currentChartIndex >= renderableSessionCharts.length && renderableSessionCharts.length > 0) {
+      setCurrentChartIndex(0);
+    }
+  }, [currentChartIndex, renderableSessionCharts.length]);
 
   useEffect(() => {
     setInsightTab('chart');
@@ -177,13 +209,15 @@ export default function InsightPanel() {
 
   const handlePrevChart = () => {
     if (hasMultipleCharts) {
-      setCurrentChartIndex((prev) => (prev - 1 + sessionCharts.length) % sessionCharts.length);
+      setCurrentChartIndex(
+        (prev) => (prev - 1 + renderableSessionCharts.length) % renderableSessionCharts.length,
+      );
     }
   };
 
   const handleNextChart = () => {
     if (hasMultipleCharts) {
-      setCurrentChartIndex((prev) => (prev + 1) % sessionCharts.length);
+      setCurrentChartIndex((prev) => (prev + 1) % renderableSessionCharts.length);
     }
   };
 
@@ -271,7 +305,7 @@ export default function InsightPanel() {
                 Visualization
                 {hasMultipleCharts && (
                   <span className="text-brand-cyan">
-                    {currentChartIndex + 1} / {sessionCharts.length}
+                    {currentChartIndex + 1} / {renderableSessionCharts.length}
                   </span>
                 )}
               </p>

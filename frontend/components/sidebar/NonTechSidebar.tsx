@@ -17,7 +17,6 @@ interface NonTechSidebarProps {
   onSemanticCorrections?: () => void;
   onDatasetOverview?: () => void;
   isCollapsed?: boolean;
-  onToggleCollapse?: () => void;
 }
 
 /**
@@ -37,14 +36,12 @@ export default function NonTechSidebar({
   onSemanticCorrections,
   onDatasetOverview,
   isCollapsed = false,
-  onToggleCollapse,
 }: NonTechSidebarProps) {
   const router = useRouter();
   const vm = useSidebarViewModel();
   const { showToast } = useToast();
   const { showDeleteConfirm } = useDeleteConfirm();
   const [sidebarMutating, setSidebarMutating] = useState(false);
-  const [expandedDatasetIdInCollapsed, setExpandedDatasetIdInCollapsed] = useState<string | null>(null);
 
   const handleSelectDataset = useCallback(
     (dataset: Dataset) => {
@@ -171,7 +168,6 @@ export default function NonTechSidebar({
         onSemanticCorrections={onSemanticCorrections}
         onDatasetOverview={onDatasetOverview}
         isCollapsed={isCollapsed}
-        onToggleCollapse={onToggleCollapse}
       />
 
       {/* Main Content Area */}
@@ -228,16 +224,12 @@ export default function NonTechSidebar({
               return 0;
             })
             .map((dataset) => {
-              const chats = vm.conversationsByDataset.get(dataset.id) || [];
-              const isExpanded = expandedDatasetIdInCollapsed === dataset.id;
-
               return (
                 <div key={dataset.id} className="relative">
                   <button
                     type="button"
                     onClick={() => {
                       handleSelectDataset(dataset);
-                      setExpandedDatasetIdInCollapsed(isExpanded ? null : dataset.id);
                     }}
                     className={`flex h-10 w-10 items-center justify-center rounded-lg transition-all duration-200 ${ vm.activeDataset?.id === dataset.id
                         ? 'bg-brand-indigo/30 text-brand-indigo'
@@ -247,38 +239,6 @@ export default function NonTechSidebar({
                   >
                     <span className="text-sm font-medium">{dataset.name.charAt(0).toUpperCase()}</span>
                   </button>
-
-                  {/* Expandable Chats Dropdown */}
-                  {isExpanded && chats.length > 0 && (
-                    <div
-                      className="absolute left-12 top-0 z-50 mt-0 w-48 rounded-lg border border-white/10 bg-slate-900 shadow-lg overflow-hidden animate-in fade-in slide-in-from-left-2 duration-200"
-                      style={{
-                        background: 'rgba(15, 23, 42, 0.95)',
-                        backdropFilter: 'blur(12px)',
-                      }}
-                    >
-                      <div className="max-h-48 overflow-y-auto">
-                        {chats.map((chat) => (
-                          <button
-                            key={chat.id}
-                            type="button"
-                            onClick={() => {
-                              handleSelectChat(chat, dataset.id);
-                              setExpandedDatasetIdInCollapsed(null);
-                            }}
-                            className={`block w-full text-left px-3 py-2 text-xs transition-colors ${
-                              vm.activeConversation?.id === chat.id
-                                ? 'bg-brand-indigo/20 text-brand-indigo'
-                                : 'text-slate-300 hover:bg-white/5'
-                            }`}
-                            title={chat.title || 'Untitled'}
-                          >
-                            <div className="truncate font-medium">{chat.title || 'Untitled'}</div>
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  )}
                 </div>
               );
             })}

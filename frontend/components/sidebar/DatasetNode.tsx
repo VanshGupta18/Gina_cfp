@@ -110,7 +110,12 @@ export function DatasetNode({
 
   if (isEditingName) {
     return (
-      <div className="group mx-1 flex w-full items-center gap-0.5 rounded-lg pr-0.5 px-3 py-2.5 animate-in fade-in duration-150">
+      <div
+        className={`
+          group mx-1 flex w-full items-center gap-0.5 rounded-lg pr-0.5 animate-in fade-in duration-150
+          ${isActive ? 'bg-brand-indigo/10' : ''}
+        `}
+      >
         <input
           ref={inputRef}
           type="text"
@@ -119,7 +124,12 @@ export function DatasetNode({
           onBlur={handleSaveRename}
           onKeyDown={handleKeyDown}
           placeholder="Dataset name"
-          className="flex-1 min-w-0 bg-brand-indigo/20 border border-brand-indigo/60 rounded-md px-3 py-2 text-sm font-medium text-white placeholder-slate-400 focus:outline-none focus:bg-brand-indigo/30 focus:border-brand-indigo focus:ring-2 focus:ring-brand-indigo/50 transition-all"
+          className={`
+            flex-1 min-w-0 rounded-lg border border-transparent bg-transparent px-3 py-2.5 text-sm font-medium
+            ${isActive ? 'text-brand-indigo' : 'text-slate-400'}
+            placeholder-slate-500 caret-slate-300
+            focus:outline-none focus:ring-0 focus-visible:ring-0
+          `}
         />
       </div>
     );

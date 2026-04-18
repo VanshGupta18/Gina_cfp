@@ -110,7 +110,12 @@ function AppShellContent({ children }: { children: React.ReactNode }) {
         </div>
       )}
       
-      <TopBar onMenuClick={() => setMobileRailOpen(true)} />
+      <TopBar
+        onMenuClick={() => setMobileRailOpen(true)}
+        showSidebarToggle={!isWelcomePage}
+        sidebarCollapsed={sidebarCollapsed}
+        onToggleSidebarCollapse={() => setSidebarCollapsed((prev) => !prev)}
+      />
 
       <div className="flex min-h-0 flex-1 overflow-hidden">
         {mobileRailOpen && !isWelcomePage && (
@@ -147,7 +152,6 @@ function AppShellContent({ children }: { children: React.ReactNode }) {
                   }
                 }}
                 isCollapsed={sidebarCollapsed}
-                onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
               />
             </aside>
 
