@@ -68,19 +68,34 @@ function OutputCardImpl({ payload, onCorrectionClick }: OutputCardProps) {
   useEffect(() => {
     if (hasChart) {
       registerChart({
+        id: payload.messageId,
         type: payload.chartType!,
         data: payload.chartData!,
         title: chartLabel(payload.chartType!),
+        resultTable: payload.resultTable ?? null,
+        resultTruncated: payload.resultTruncated,
+        explanation: payload.explanation,
       });
     }
-  }, [hasChart, payload.chartType, payload.chartData, registerChart]);
+  }, [
+    hasChart,
+    payload.messageId,
+    payload.chartType,
+    payload.chartData,
+    payload.resultTable,
+    payload.resultTruncated,
+    payload.explanation,
+    registerChart,
+  ]);
 
   const handleOpenAllCharts = () => {
     if (sessionCharts.length > 0) {
       const activeIndex = sessionCharts.findIndex(
         (c) =>
-          c.type === payload.chartType &&
-          JSON.stringify(c.data) === JSON.stringify(payload.chartData),
+          (c.id && c.id === payload.messageId) ||
+          (!payload.messageId &&
+            c.type === payload.chartType &&
+            JSON.stringify(c.data) === JSON.stringify(payload.chartData)),
       );
       openInsightWithAll(sessionCharts, Math.max(0, activeIndex));
     }

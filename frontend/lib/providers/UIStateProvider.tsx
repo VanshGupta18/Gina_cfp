@@ -2,15 +2,19 @@
 
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { usePathname } from 'next/navigation';
-import type { ChartType, ChartData } from '@/types';
+import type { ChartType, ChartData, QueryResultTable } from '@/types';
 import { postSnapshotToggle } from '@/lib/api/debug';
 import { useToast } from '@/lib/providers/ToastProvider';
 
-interface PinnedChartState {
+export interface PinnedChartState {
   type: ChartType;
   data: ChartData;
   title?: string;
+  /** Assistant message id — keeps one entry per answer when charts look alike */
   id?: string;
+  resultTable?: QueryResultTable | null;
+  resultTruncated?: boolean;
+  explanation?: string;
 }
 
 interface UIStateContextType {
@@ -50,15 +54,27 @@ export function UIStateProvider({ children }: { children: React.ReactNode }) {
       id: chart.id || `chart-${Date.now()}-${Math.random()}`,
     };
     setSessionCharts((prev) => {
+      if (chart.id) {
+        const i = prev.findIndex((c) => c.id === chart.id);
+        if (i >= 0) {
+          const next = [...prev];
+          next[i] = chartWithId;
+          return next;
+        }
+      }
       const exists = prev.some(
-        (c) => c.type === chart.type && JSON.stringify(c.data) === JSON.stringify(chart.data),
+        (c) =>
+          (chart.id ? c.id === chart.id : false) ||
+          (!chart.id &&
+            c.type === chart.type &&
+            JSON.stringify(c.data) === JSON.stringify(chart.data)),
       );
       return exists ? prev : [...prev, chartWithId];
     });
   }, []);
 
   const openInsight = useCallback((type: ChartType, data: ChartData, title?: string) => {
-    setActiveInsight({ type, data, title });
+    setActiveInsight({ type, data, title } as PinnedChartState);
     setInsightPanelOpen(true);
   }, []);
 
