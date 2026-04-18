@@ -124,12 +124,6 @@ export function ChatInput({
             </Button>
           </div>
         </div>
-
-        <p className="text-center text-[11px] text-slate-700">
-          Press <kbd className="font-mono bg-white/5 px-1 py-0.5 rounded text-[10px] text-slate-600">⌘</kbd>{' '}
-          <kbd className="font-mono bg-white/5 px-1 py-0.5 rounded text-[10px] text-slate-600">↵</kbd>{' '}
-          to send
-        </p>
       </form>
     </div>
   );

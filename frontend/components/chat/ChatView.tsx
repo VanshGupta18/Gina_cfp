@@ -1,11 +1,13 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import { useConversation } from '@/lib/hooks/useConversation';
 import { useDatasets } from '@/lib/hooks/useDatasets';
 import { usePipeline } from '@/lib/hooks/usePipeline';
 import { useReasoningToggle } from '@/lib/hooks/useReasoningToggle';
 import { buildSessionContextFromMessages } from '@/lib/chat/sessionContext';
+import { parseRateLimitError } from '@/lib/api/errors';
+import { useDatasetActions } from '@/lib/context/DatasetActionsContext';
 import DemoBadge from '@/components/sidebar/DemoBadge';
 import { CorrectionModal } from '@/components/upload/CorrectionModal';
 import { ChatInput } from './ChatInput';
@@ -14,6 +16,7 @@ import { UserMessage } from './UserMessage';
 import { AssistantMessage } from './AssistantMessage';
 import { DatasetWelcome } from './DatasetWelcome';
 import { ConversationWelcome } from './ConversationWelcome';
+import { RateLimitErrorPanel } from './RateLimitErrorPanel';
 import type { StarterQuestionItem } from '@/types';
 import { getStarterQuestions } from '@/lib/api/datasets';
 
@@ -30,6 +33,9 @@ export function ChatView() {
   const { activeConversation, messages, addMessage, refreshConversations } = useConversation();
   const { steps, result, isStreaming, error, runQuery } = usePipeline();
   const { showReasoning } = useReasoningToggle();
+  const { onViewDataset, onSemanticCorrections } = useDatasetActions();
+
+  const rateLimitInfo = parseRateLimitError(error);
 
   const sessionContextForNextQuery = useMemo(
     () => buildSessionContextFromMessages(messages),
@@ -45,6 +51,21 @@ export function ChatView() {
   const [starterQuestions, setStarterQuestions] = useState<StarterQuestionItem[] | undefined>(
     undefined,
   );
+
+  const handleRetryAfterRateLimit = useCallback(async () => {
+    // Retry the last query
+    if (messages.length > 0 && activeConversation && activeDataset) {
+      const lastUserMsg = [...messages].reverse().find((m) => m.role === 'user');
+      if (lastUserMsg) {
+        await runQuery({
+          conversationId: activeConversation.id,
+          datasetId: activeConversation.datasetId,
+          question: lastUserMsg.content,
+          sessionContext: sessionContextForNextQuery,
+        });
+      }
+    }
+  }, [messages, activeConversation, activeDataset, runQuery, sessionContextForNextQuery]);
 
   useEffect(() => {
     if (!activeConversation || messages.length > 0) {
@@ -136,6 +157,24 @@ export function ChatView() {
             <h2 className="text-lg font-bold font-serif text-white tracking-wide">{activeDataset.name}</h2>
             {activeDataset.isDemo && <DemoBadge />}
           </div>
+          <div className="flex items-center gap-2">
+            {onViewDataset && (
+              <button
+                onClick={onViewDataset}
+                className="inline-flex items-center justify-center rounded-lg border border-white/10 px-3 py-1.5 text-xs font-medium text-slate-300 transition-colors hover:border-white/20 hover:bg-white/5 hover:text-white"
+              >
+                View data
+              </button>
+            )}
+            {onSemanticCorrections && !activeDataset.isDemo && (
+              <button
+                onClick={onSemanticCorrections}
+                className="inline-flex items-center justify-center rounded-lg border border-white/10 px-3 py-1.5 text-xs font-medium text-slate-300 transition-colors hover:border-white/20 hover:bg-white/5 hover:text-white"
+              >
+                Semantic Corrections
+              </button>
+            )}
+          </div>
         </div>
 
         <div className="flex-1 overflow-y-auto pb-32">
@@ -159,6 +198,24 @@ export function ChatView() {
         <div className="flex items-center gap-3">
           <h2 className="text-lg font-bold font-serif text-white tracking-wide">{activeDataset.name}</h2>
           {activeDataset.isDemo && <DemoBadge />}
+        </div>
+        <div className="flex items-center gap-2">
+          {onViewDataset && (
+            <button
+              onClick={onViewDataset}
+              className="inline-flex items-center justify-center rounded-lg border border-white/10 px-3 py-1.5 text-xs font-medium text-slate-300 transition-colors hover:border-white/20 hover:bg-white/5 hover:text-white"
+            >
+              View data
+            </button>
+          )}
+          {onSemanticCorrections && !activeDataset.isDemo && (
+            <button
+              onClick={onSemanticCorrections}
+              className="inline-flex items-center justify-center rounded-lg border border-white/10 px-3 py-1.5 text-xs font-medium text-slate-300 transition-colors hover:border-white/20 hover:bg-white/5 hover:text-white"
+            >
+              Semantic Corrections
+            </button>
+          )}
         </div>
       </div>
 
@@ -209,8 +266,18 @@ export function ChatView() {
             )}
 
             {error && (
-              <div className="max-w-4xl mx-auto px-4 py-3 rounded-xl bg-red-500/10 border border-red-500/50 text-red-400 text-sm">
-                {error}
+              <div className="max-w-4xl mx-auto px-4 py-3">
+                {rateLimitInfo ? (
+                  <RateLimitErrorPanel
+                    retryAfterSeconds={rateLimitInfo.retryAfterSeconds}
+                    onRetry={handleRetryAfterRateLimit}
+                  />
+                ) : (
+                  <div className="rounded-xl bg-red-500/10 border border-red-500/50 p-4 text-red-400 text-sm">
+                    <p className="font-semibold mb-1">Query Failed</p>
+                    <p>{error}</p>
+                  </div>
+                )}
               </div>
             )}
           </MessageList>

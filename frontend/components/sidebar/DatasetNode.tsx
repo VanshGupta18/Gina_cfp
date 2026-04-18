@@ -19,9 +19,9 @@ interface DatasetNodeProps {
   onSelectChat: (conversation: Conversation) => void;
   activeConversation: Conversation | null;
   isCreatingChat: boolean;
-  onRenameDataset?: (dataset: Dataset) => void;
+  onRenameDataset?: (dataset: Dataset, newName: string) => void;
   onDeleteDataset?: (dataset: Dataset) => void;
-  onRenameChat?: (conversation: Conversation) => void;
+  onRenameChat?: (conversation: Conversation, newName: string) => void;
   onDeleteChat?: (conversation: Conversation) => void;
   datasetActionsBusy?: boolean;
   chatActionsBusy?: boolean;
@@ -57,15 +57,43 @@ export function DatasetNode({
   chatActionsBusy,
 }: DatasetNodeProps) {
   const [menuOpen, setMenuOpen] = useState(false);
+  const [isEditingName, setIsEditingName] = useState(false);
+  const [editingValue, setEditingValue] = useState('');
   const menuRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
 
   const canMutateDataset = !dataset.isDemo && (onRenameDataset || onDeleteDataset);
+
+  useEffect(() => {
+    if (isEditingName && inputRef.current) {
+      inputRef.current.focus();
+      inputRef.current.select();
+    }
+  }, [isEditingName]);
 
   const handleRowClick = () => {
     if (!isActive) {
       onSelect();
     }
     onToggle();
+  };
+
+  const handleSaveRename = () => {
+    const trimmed = editingValue.trim();
+    if (trimmed && onRenameDataset) {
+      onRenameDataset(dataset, trimmed);
+    }
+    setIsEditingName(false);
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      handleSaveRename();
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      setIsEditingName(false);
+    }
   };
 
   useEffect(() => {
@@ -79,6 +107,23 @@ export function DatasetNode({
     document.addEventListener('mousedown', handle);
     return () => document.removeEventListener('mousedown', handle);
   }, [menuOpen]);
+
+  if (isEditingName) {
+    return (
+      <div className="group mx-1 flex w-full items-center gap-0.5 rounded-lg pr-0.5 px-3 py-2.5 animate-in fade-in duration-150">
+        <input
+          ref={inputRef}
+          type="text"
+          value={editingValue}
+          onChange={(e) => setEditingValue(e.target.value)}
+          onBlur={handleSaveRename}
+          onKeyDown={handleKeyDown}
+          placeholder="Dataset name"
+          className="flex-1 min-w-0 bg-brand-indigo/20 border border-brand-indigo/60 rounded-md px-3 py-2 text-sm font-medium text-white placeholder-slate-400 focus:outline-none focus:bg-brand-indigo/30 focus:border-brand-indigo focus:ring-2 focus:ring-brand-indigo/50 transition-all"
+        />
+      </div>
+    );
+  }
 
   return (
     <div>
@@ -148,7 +193,8 @@ export function DatasetNode({
                     className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-slate-300 hover:bg-white/10 hover:text-white"
                     onClick={() => {
                       setMenuOpen(false);
-                      onRenameDataset(dataset);
+                      setEditingValue(dataset.name);
+                      setIsEditingName(true);
                     }}
                   >
                     <Pencil className="h-3.5 w-3.5 shrink-0 text-slate-500" />

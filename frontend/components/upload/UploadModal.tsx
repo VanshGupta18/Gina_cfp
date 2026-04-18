@@ -1,14 +1,16 @@
 'use client';
 
-import React, { useState, useRef, useCallback } from 'react';
+import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { uploadDataset } from '@/lib/api/datasets';
 import { createConversation } from '@/lib/api/conversations';
 import { useDatasets } from '@/lib/hooks/useDatasets';
+import { isRateLimitError, parseRateLimitError } from '@/lib/api/errors';
 import PIISummaryBanner from './PIISummaryBanner';
 import UnderstandingCard from './UnderstandingCard';
 import { InlineCorrectionPanel } from '@/components/semantic/InlineCorrectionPanel';
-import { UploadCloud, ShieldAlert, ChevronRight, RotateCcw } from 'lucide-react';
+import { RateLimitErrorPanel } from '@/components/chat/RateLimitErrorPanel';
+import { UploadCloud, ShieldAlert, ChevronRight, RotateCcw, AlertCircle } from 'lucide-react';
 import { Modal } from '@/components/ui/Modal';
 import { Button } from '@/components/ui/Button';
 import type { PiiSummary } from '@/types';
@@ -24,6 +26,8 @@ export default function UploadModal({ onClose }: UploadModalProps) {
   const [isDragging, setIsDragging] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [retryAfterSeconds, setRetryAfterSeconds] = useState<number | undefined>(undefined);
+  const [isWaitingForRateLimit, setIsWaitingForRateLimit] = useState(false);
 
   const [step, setStep] = useState<1 | 2 | 3>(1);
   const [piiSummary, setPiiSummary] = useState<PiiSummary | null>(null);
@@ -34,6 +38,20 @@ export default function UploadModal({ onClose }: UploadModalProps) {
   const [fileDetails, setFileDetails] = useState<{ name: string; size: string } | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const pendingFileRef = useRef<File | null>(null);
+
+  // Auto-retry after rate limit countdown finishes
+  useEffect(() => {
+    if (!isWaitingForRateLimit || !retryAfterSeconds || retryAfterSeconds <= 0 || !pendingFileRef.current) {
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      void performUpload(pendingFileRef.current!);
+    }, retryAfterSeconds * 1000);
+
+    return () => clearTimeout(timer);
+  }, [isWaitingForRateLimit, retryAfterSeconds]);
 
   const formatBytes = (bytes: number, decimals = 2) => {
     if (!+bytes) return '0 Bytes';
@@ -48,6 +66,9 @@ export default function UploadModal({ onClose }: UploadModalProps) {
     async (file: File) => {
       setIsProcessing(true);
       setError(null);
+      setIsWaitingForRateLimit(false);
+      setRetryAfterSeconds(undefined);
+      pendingFileRef.current = null;
       try {
         const result = await uploadDataset(file);
         setPiiSummary(result.piiSummary);
@@ -56,13 +77,27 @@ export default function UploadModal({ onClose }: UploadModalProps) {
         setStep(3);
         await refreshDatasets();
       } catch (err: unknown) {
-        const message = err instanceof Error ? err.message : 'Upload failed. Please try again.';
-        setError(message);
+        // Check if it's a rate limit error
+        if (isRateLimitError(err)) {
+          const rateLimitInfo = parseRateLimitError(err);
+          const retrySeconds = rateLimitInfo?.retryAfterSeconds || 60;
+          // Don't show error - keep processing state and wait silently
+          setIsWaitingForRateLimit(true);
+          setRetryAfterSeconds(retrySeconds);
+          pendingFileRef.current = file;
+          // Keep isProcessing true so spinner keeps showing
+          return;
+        } else {
+          const message = err instanceof Error ? err.message : 'Upload failed. Please try again.';
+          setError(message);
+        }
       } finally {
-        setIsProcessing(false);
+        if (!isWaitingForRateLimit) {
+          setIsProcessing(false);
+        }
       }
     },
-    [refreshDatasets],
+    [isWaitingForRateLimit],
   );
 
   const handleProcessFile = useCallback(
@@ -163,9 +198,13 @@ export default function UploadModal({ onClose }: UploadModalProps) {
           ))}
         </div>
 
-        {error && (
-          <div className="mb-6 rounded-lg bg-red-500/10 border border-red-500/20 px-4 py-3 text-sm text-red-400">
-            {error}
+        {error && !isWaitingForRateLimit && (
+          <div className="mb-6 rounded-lg bg-red-500/10 border border-red-500/20 px-4 py-3 text-sm text-red-400 flex items-start gap-3">
+            <AlertCircle className="w-5 h-5 shrink-0 mt-0.5" />
+            <div className="flex-1">
+              <p className="font-medium mb-2">Upload Failed</p>
+              <p className="text-xs text-red-300/90">{error}</p>
+            </div>
           </div>
         )}
 
@@ -252,7 +291,9 @@ export default function UploadModal({ onClose }: UploadModalProps) {
               <div className="rounded-xl border border-white/10 bg-white/[0.02] p-8 flex flex-col items-center gap-4 text-center">
                 <div className="w-10 h-10 border-2 border-brand-indigo-light/30 border-t-brand-indigo-light rounded-full animate-spin" />
                 <p className="text-sm text-slate-300">
-                  Uploading and scanning for personally identifiable information…
+                  {isWaitingForRateLimit
+                    ? 'Finalizing upload…'
+                    : 'Uploading and scanning for personally identifiable information…'}
                 </p>
               </div>
             ) : null}
@@ -283,7 +324,7 @@ export default function UploadModal({ onClose }: UploadModalProps) {
                 Go back
               </Button>
 
-              {error && originalFileMemo ? (
+              {error && !isWaitingForRateLimit && originalFileMemo ? (
                 <Button
                   variant="danger"
                   onClick={() => {

@@ -86,6 +86,13 @@ export interface Message {
   createdAt: string;
 }
 
+export interface RateLimitError {
+  type: 'rate_limit';
+  message: string;
+  retryAfterSeconds?: number;
+  upgradeUrl?: string;
+}
+
 // =====================================================
 // Pipeline & Query
 // =====================================================

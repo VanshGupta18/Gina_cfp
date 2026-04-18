@@ -4,6 +4,7 @@ import React, { useCallback, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useSidebarViewModel } from '@/lib/hooks/useSidebarViewModel';
 import { useToast } from '@/lib/providers/ToastProvider';
+import { useDeleteConfirm } from '@/lib/context/DeleteConfirmContext';
 import { SidebarHeaderActions } from './SidebarHeaderActions';
 import { DatasetTree } from './DatasetTree';
 import { SidebarEmptyState } from './SidebarEmptyState';
@@ -14,6 +15,8 @@ interface NonTechSidebarProps {
   onNavigate?: () => void;
   onViewDataset?: () => void;
   onSemanticCorrections?: () => void;
+  isCollapsed?: boolean;
+  onToggleCollapse?: () => void;
 }
 
 /**
@@ -31,11 +34,15 @@ export default function NonTechSidebar({
   onNavigate,
   onViewDataset,
   onSemanticCorrections,
+  isCollapsed = false,
+  onToggleCollapse,
 }: NonTechSidebarProps) {
   const router = useRouter();
   const vm = useSidebarViewModel();
   const { showToast } = useToast();
+  const { showDeleteConfirm } = useDeleteConfirm();
   const [sidebarMutating, setSidebarMutating] = useState(false);
+  const [expandedDatasetIdInCollapsed, setExpandedDatasetIdInCollapsed] = useState<string | null>(null);
 
   const handleSelectDataset = useCallback(
     (dataset: Dataset) => {
@@ -76,19 +83,12 @@ export default function NonTechSidebar({
   );
 
   const handleRenameDataset = useCallback(
-    (dataset: Dataset) => {
+    (dataset: Dataset, newName: string) => {
       if (dataset.isDemo) return;
-      const next = window.prompt('Dataset name', dataset.name);
-      if (next === null) return;
-      const trimmed = next.trim();
-      if (!trimmed) {
-        showToast('Name cannot be empty', 'error');
-        return;
-      }
       void (async () => {
         setSidebarMutating(true);
         try {
-          await vm.renameDataset(dataset, trimmed);
+          await vm.renameDataset(dataset, newName);
           showToast('Dataset renamed', 'success');
         } catch {
           showToast('Failed to rename dataset', 'error');
@@ -103,14 +103,7 @@ export default function NonTechSidebar({
   const handleDeleteDataset = useCallback(
     (dataset: Dataset) => {
       if (dataset.isDemo) return;
-      if (
-        !window.confirm(
-          `Delete dataset "${dataset.name}"?\n\nAll conversations for this dataset will be permanently removed.`,
-        )
-      ) {
-        return;
-      }
-      void (async () => {
+      showDeleteConfirm(dataset, 'dataset', async () => {
         setSidebarMutating(true);
         try {
           await vm.deleteDataset(dataset);
@@ -120,51 +113,38 @@ export default function NonTechSidebar({
         } finally {
           setSidebarMutating(false);
         }
-      })();
+      });
     },
-    [vm, showToast],
-  );
-
-  const handleRenameChat = useCallback(
-    (conversation: Conversation) => {
-      const next = window.prompt('Conversation title', conversation.title || 'Untitled');
-      if (next === null) return;
-      const trimmed = next.trim();
-      if (!trimmed) {
-        showToast('Title cannot be empty', 'error');
-        return;
-      }
-      void (async () => {
-        setSidebarMutating(true);
-        try {
-          await vm.renameChat(conversation, trimmed);
-          showToast('Conversation renamed', 'success');
-        } catch {
-          showToast('Failed to rename conversation', 'error');
-        } finally {
-          setSidebarMutating(false);
-        }
-      })();
-    },
-    [vm, showToast],
+    [vm, showToast, showDeleteConfirm],
   );
 
   const handleDeleteChat = useCallback(
     (conversation: Conversation) => {
-      if (
-        !window.confirm(
-          `Delete this conversation?\n\n"${conversation.title || 'Untitled'}" will be permanently removed.`,
-        )
-      ) {
-        return;
-      }
-      void (async () => {
+      showDeleteConfirm(conversation, 'chat', async () => {
         setSidebarMutating(true);
         try {
           await vm.deleteChat(conversation);
           showToast('Conversation deleted', 'success');
-        } catch {
+        } catch (error) {
           showToast('Failed to delete conversation', 'error');
+          throw error;
+        } finally {
+          setSidebarMutating(false);
+        }
+      });
+    },
+    [vm, showToast, showDeleteConfirm],
+  );
+
+  const handleRenameChat = useCallback(
+    (conversation: Conversation, newName: string) => {
+      void (async () => {
+        setSidebarMutating(true);
+        try {
+          await vm.renameChat(conversation, newName);
+          showToast('Conversation renamed', 'success');
+        } catch {
+          showToast('Failed to rename conversation', 'error');
         } finally {
           setSidebarMutating(false);
         }
@@ -189,10 +169,12 @@ export default function NonTechSidebar({
         isCreatingChat={vm.isCreatingChat}
         onViewDataset={onViewDataset}
         onSemanticCorrections={onSemanticCorrections}
+        isCollapsed={isCollapsed}
+        onToggleCollapse={onToggleCollapse}
       />
 
       {/* Main Content Area */}
-      <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+      <div className={`flex min-h-0 flex-1 flex-col overflow-hidden ${isCollapsed ? 'hidden' : ''}`}>
         {/* No Datasets: Empty State */}
         {vm.datasetsLoading === false && vm.datasets.length === 0 && (
           <SidebarEmptyState onUpload={handleUpload} />
@@ -234,6 +216,73 @@ export default function NonTechSidebar({
           </div>
         )}
       </div>
+
+      {/* Collapsed View: Dataset Icons with Expandable Chats */}
+      {isCollapsed && vm.datasets.length > 0 && (
+        <div className="flex min-h-0 flex-1 flex-col overflow-y-auto py-2 px-2">
+          {[...vm.datasets]
+            .sort((a, b) => {
+              if (vm.activeDataset?.id === a.id) return -1;
+              if (vm.activeDataset?.id === b.id) return 1;
+              return 0;
+            })
+            .map((dataset) => {
+              const chats = vm.conversationsByDataset.get(dataset.id) || [];
+              const isExpanded = expandedDatasetIdInCollapsed === dataset.id;
+
+              return (
+                <div key={dataset.id} className="relative">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      handleSelectDataset(dataset);
+                      setExpandedDatasetIdInCollapsed(isExpanded ? null : dataset.id);
+                    }}
+                    className={`flex h-10 w-10 items-center justify-center rounded-lg transition-all duration-200 ${ vm.activeDataset?.id === dataset.id
+                        ? 'bg-brand-indigo/30 text-brand-indigo'
+                        : 'text-slate-400 hover:bg-white/5 hover:text-slate-300'
+                    }`}
+                    title={dataset.name}
+                  >
+                    <span className="text-sm font-medium">{dataset.name.charAt(0).toUpperCase()}</span>
+                  </button>
+
+                  {/* Expandable Chats Dropdown */}
+                  {isExpanded && chats.length > 0 && (
+                    <div
+                      className="absolute left-12 top-0 z-50 mt-0 w-48 rounded-lg border border-white/10 bg-slate-900 shadow-lg overflow-hidden animate-in fade-in slide-in-from-left-2 duration-200"
+                      style={{
+                        background: 'rgba(15, 23, 42, 0.95)',
+                        backdropFilter: 'blur(12px)',
+                      }}
+                    >
+                      <div className="max-h-48 overflow-y-auto">
+                        {chats.map((chat) => (
+                          <button
+                            key={chat.id}
+                            type="button"
+                            onClick={() => {
+                              handleSelectChat(chat, dataset.id);
+                              setExpandedDatasetIdInCollapsed(null);
+                            }}
+                            className={`block w-full text-left px-3 py-2 text-xs transition-colors ${
+                              vm.activeConversation?.id === chat.id
+                                ? 'bg-brand-indigo/20 text-brand-indigo'
+                                : 'text-slate-300 hover:bg-white/5'
+                            }`}
+                            title={chat.title || 'Untitled'}
+                          >
+                            <div className="truncate font-medium">{chat.title || 'Untitled'}</div>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+        </div>
+      )}
     </div>
   );
 }

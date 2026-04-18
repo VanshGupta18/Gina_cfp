@@ -17,9 +17,9 @@ interface DatasetTreeProps {
   onSelectChat: (conversation: Conversation, datasetId: string) => void;
   activeConversation: Conversation | null;
   isCreatingChat: boolean;
-  onRenameDataset?: (dataset: Dataset) => void;
+  onRenameDataset?: (dataset: Dataset, newName: string) => void;
   onDeleteDataset?: (dataset: Dataset) => void;
-  onRenameChat?: (conversation: Conversation) => void;
+  onRenameChat?: (conversation: Conversation, newName: string) => void;
   onDeleteChat?: (conversation: Conversation) => void;
   datasetActionsBusy?: boolean;
   chatActionsBusy?: boolean;
@@ -49,9 +49,16 @@ export function DatasetTree({
     return null;
   }
 
+  // Sort datasets: active dataset first, then others
+  const sortedDatasets = [...datasets].sort((a, b) => {
+    if (activeDataset?.id === a.id) return -1;
+    if (activeDataset?.id === b.id) return 1;
+    return 0;
+  });
+
   return (
     <div className="space-y-0.5 px-1">
-      {datasets.map((dataset) => (
+      {sortedDatasets.map((dataset) => (
         <DatasetNode
           key={dataset.id}
           dataset={dataset}

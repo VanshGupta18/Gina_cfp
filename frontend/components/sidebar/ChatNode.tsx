@@ -9,7 +9,7 @@ interface ChatNodeProps {
   isActive: boolean;
   onClick: () => void;
   showRelativeTime?: boolean;
-  onRename?: (conversation: Conversation) => void;
+  onRename?: (conversation: Conversation, newName: string) => void;
   onDelete?: (conversation: Conversation) => void;
   busy?: boolean;
 }
@@ -42,13 +42,41 @@ export function ChatNode({
   busy,
 }: ChatNodeProps) {
   const [menuOpen, setMenuOpen] = useState(false);
+  const [isEditingName, setIsEditingName] = useState(false);
+  const [editingValue, setEditingValue] = useState('');
   const menuRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
 
   const relativeTime = useMemo(() => formatRelativeTime(conversation.updatedAt), [conversation.updatedAt]);
 
   const title = conversation.title || 'Untitled Chat';
 
   const hasActions = Boolean(onRename || onDelete);
+
+  useEffect(() => {
+    if (isEditingName && inputRef.current) {
+      inputRef.current.focus();
+      inputRef.current.select();
+    }
+  }, [isEditingName]);
+
+  const handleSaveRename = () => {
+    const trimmed = editingValue.trim();
+    if (trimmed && onRename) {
+      onRename(conversation, trimmed);
+    }
+    setIsEditingName(false);
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      handleSaveRename();
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      setIsEditingName(false);
+    }
+  };
 
   useEffect(() => {
     if (!menuOpen) return;
@@ -62,10 +90,27 @@ export function ChatNode({
     return () => document.removeEventListener('mousedown', handle);
   }, [menuOpen]);
 
+  if (isEditingName) {
+    return (
+      <div className="group flex w-full items-center gap-0.5 rounded-lg pr-1 px-3 py-2 animate-in fade-in duration-150">
+        <input
+          ref={inputRef}
+          type="text"
+          value={editingValue}
+          onChange={(e) => setEditingValue(e.target.value)}
+          onBlur={handleSaveRename}
+          onKeyDown={handleKeyDown}
+          placeholder="Chat title"
+          className="flex-1 min-w-0 bg-brand-indigo/20 border border-brand-indigo/60 rounded-md px-3 py-2 text-sm text-white placeholder-slate-400 focus:outline-none focus:bg-brand-indigo/30 focus:border-brand-indigo focus:ring-2 focus:ring-brand-indigo/50 transition-all"
+        />
+      </div>
+    );
+  }
+
   return (
     <div
       className={`
-        group flex w-full items-center gap-0.5 rounded-lg pr-1
+        group flex w-full items-center gap-0.5 rounded-lg pr-1 animate-in fade-in duration-150
         ${isActive ? 'bg-brand-indigo/15' : 'hover:bg-white/5'}
       `}
     >
@@ -118,7 +163,8 @@ export function ChatNode({
                   className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-slate-300 hover:bg-white/10 hover:text-white"
                   onClick={() => {
                     setMenuOpen(false);
-                    onRename(conversation);
+                    setEditingValue(title);
+                    setIsEditingName(true);
                   }}
                 >
                   <Pencil className="h-3.5 w-3.5 shrink-0 text-slate-500" />

@@ -24,13 +24,100 @@ export function messageFromApiErrorPayload(data: unknown): string | null {
   if (typeof data !== 'object' || data === null || !('error' in data)) {
     return null;
   }
-  let errorMessage = String((data as { error: string }).error);
+  const errorField = (data as { error: unknown }).error;
+  let errorMessage: string;
+
+  if (typeof errorField === 'string') {
+    errorMessage = errorField;
+  } else if (typeof errorField === 'object' && errorField !== null && 'message' in errorField) {
+    errorMessage = String((errorField as { message: unknown }).message);
+  } else {
+    errorMessage = String(errorField);
+  }
+
   const details = (data as { details?: { fieldErrors?: Record<string, string[]> } }).details;
   if (details?.fieldErrors) {
     const first = Object.values(details.fieldErrors).flat()[0];
     if (first) errorMessage = `${errorMessage}: ${first}`;
   }
   return errorMessage;
+}
+
+/** Detect if error is a rate limit error */
+export function isRateLimitError(err: unknown): boolean {
+  const message =
+    err instanceof Error
+      ? err.message
+      : typeof err === 'string'
+        ? err
+        : (() => {
+            try {
+              return JSON.stringify(err);
+            } catch {
+              return String(err);
+            }
+          })();
+
+  const normalized = message.toLowerCase();
+  return (
+    normalized.includes('rate_limit') ||
+    normalized.includes('rate limit') ||
+    normalized.includes('rate_limit_exceeded') ||
+    normalized.includes('tokens per day') ||
+    normalized.includes('tpd')
+  );
+}
+
+/** Extract rate limit info (retry time, upgrade link) from error message */
+export function parseRateLimitError(err: unknown): {
+  message: string;
+  retryAfterSeconds?: number;
+  upgradeUrl?: string;
+} | null {
+  const errStr =
+    err instanceof Error
+      ? err.message
+      : typeof err === 'string'
+        ? err
+        : (() => {
+            try {
+              return JSON.stringify(err);
+            } catch {
+              return String(err);
+            }
+          })();
+
+  // Check if this is a rate limit error
+  if (!isRateLimitError(errStr)) return null;
+
+  // Try to extract retry time (e.g., "Please try again in 9m2.592s")
+  let retryAfterSeconds: number | undefined;
+  const minuteSecondMatch = errStr.match(/(\d+)\s*m(?:in(?:ute)?s?)?\s*(\d+(?:\.\d+)?)\s*s/i);
+  if (minuteSecondMatch) {
+    const minutes = parseInt(minuteSecondMatch[1], 10);
+    const seconds = parseFloat(minuteSecondMatch[2]);
+    retryAfterSeconds = minutes * 60 + Math.ceil(seconds);
+  } else {
+    const secondsOnlyMatch = errStr.match(
+      /(?:try again in|retry after)\s*(\d+(?:\.\d+)?)\s*s(?:ec(?:ond)?s?)?/i
+    );
+    if (secondsOnlyMatch) {
+      retryAfterSeconds = Math.ceil(parseFloat(secondsOnlyMatch[1]));
+    }
+  }
+
+  // Extract upgrade URL if present
+  let upgradeUrl: string | undefined;
+  const urlMatch = errStr.match(/https?:\/\/[^\s"']+/);
+  if (urlMatch) {
+    upgradeUrl = urlMatch[0];
+  }
+
+  return {
+    message: errStr,
+    retryAfterSeconds,
+    upgradeUrl,
+  };
 }
 
 /** Build a clear Error for failed `POST /api/query` before the SSE body starts. */

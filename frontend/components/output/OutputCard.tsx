@@ -10,7 +10,6 @@ import { NarrativeText } from './NarrativeText';
 import { CitationChips } from './CitationChips';
 import { SQLExpand } from './SQLExpand';
 import { FollowUpSuggestions } from './FollowUpSuggestions';
-import { SomethingOff } from './SomethingOff';
 import ChartRenderer from '../charts/ChartRenderer';
 
 export interface OutputCardProps {
@@ -41,10 +40,9 @@ function isBigNumberChartData(chartData: ChartData): chartData is BigNumberChart
 function hasChartData(chartType?: ChartType, chartData?: ChartData): boolean {
   if (!chartType || !chartData) return false;
 
+  // Don't show visualization for key figures - they're already displayed at the top
   if (chartType === 'big_number') {
-    if (!isBigNumberChartData(chartData)) return false;
-    const value = chartData.value;
-    return value !== undefined && value !== null && String(value).trim().length > 0;
+    return false;
   }
 
   if (!isStandardChartData(chartData)) {
@@ -186,10 +184,9 @@ function OutputCardImpl({ payload, onCorrectionClick }: OutputCardProps) {
         />
       )}
 
-      {(payload.followUpSuggestions?.length || onCorrectionClick) && (
+      {payload.followUpSuggestions?.length && (
         <div className="flex flex-col gap-4">
           <FollowUpSuggestions suggestions={payload.followUpSuggestions} />
-          <SomethingOff onCorrectionClick={onCorrectionClick} />
         </div>
       )}
     </div>

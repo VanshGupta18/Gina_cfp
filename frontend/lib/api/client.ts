@@ -59,7 +59,8 @@ export async function apiFetch<T>(
     let data: unknown;
 
     if (contentType?.includes('application/json')) {
-      data = await response.json();
+      const responseText = await response.text();
+      data = responseText ? JSON.parse(responseText) : null;
     } else {
       data = await response.text();
     }

@@ -12,7 +12,7 @@ interface ChatNodeListProps {
   isCreatingChat: boolean;
   showEmptyPrompt?: boolean;
   onStartNewChat?: () => void;
-  onRenameChat?: (conversation: Conversation) => void;
+  onRenameChat?: (conversation: Conversation, newName: string) => void;
   onDeleteChat?: (conversation: Conversation) => void;
   chatActionsBusy?: boolean;
 }
