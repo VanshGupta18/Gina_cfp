@@ -252,7 +252,7 @@ export default function WhatGinaProvides() {
                 <ArrowRight className="w-4 h-4" />
               </Link>
             </div>
-            <p className="mt-5 text-xs text-slate-500">No credit card required · Free forever plan</p>
+            <p className="mt-5 text-xs text-slate-500">Instant setup</p>
           </div>
         </section>
       </main>

@@ -300,7 +300,7 @@ export default function LiveDemoPage() {
           <div className="relative z-10 max-w-2xl mx-auto text-center">
             <h2 className="text-4xl font-bold text-white mb-4">Ready to use it on your own data?</h2>
             <p className="text-lg text-slate-400 mb-8 max-w-md mx-auto">
-              Upload any CSV and get answers in under 3 seconds. No SQL, no setup, no credit card.
+              Upload any CSV and get answers in under 3 seconds. No SQL, no setup.
             </p>
             <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
               <button

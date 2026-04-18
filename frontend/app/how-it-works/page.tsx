@@ -229,7 +229,7 @@ export default function HowItWorksPage() {
                 Back to home
               </Link>
             </div>
-            <p className="mt-6 text-sm text-slate-500">No credit card required · Instant setup · Free forever plan</p>
+            <p className="mt-6 text-sm text-slate-500">Instant setup</p>
           </div>
         </section>
       </main>
