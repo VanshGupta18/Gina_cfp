@@ -180,6 +180,14 @@ export interface UploadSheetResult {
   understandingCard: string;
 }
 
+/** POST /api/datasets/upload — server-side PII scan summary */
+export interface PiiSummary {
+  redactedColumns: string[];
+  totalRedactions: number;
+  items: Array<{ columnKey: string; reason: string; label?: string }>;
+  method: 'agent' | 'fallback';
+}
+
 export interface UploadResult {
   uploadBatchId: string;
   results: UploadSheetResult[];
@@ -187,16 +195,7 @@ export interface UploadResult {
   dataset: Dataset;
   semanticState: SemanticState;
   understandingCard: string;
-  piiSummary: {
-    redactedColumns: string[];
-    totalRedactions: number;
-  };
-}
-
-export interface PIIRedactionResult {
-  redactedFile: File;
-  redactedColumns: string[];
-  totalRedactions: number;
+  piiSummary: PiiSummary;
 }
 
 // =====================================================

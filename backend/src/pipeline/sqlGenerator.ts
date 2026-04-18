@@ -16,7 +16,7 @@ import { env } from '../config/env.js';
 import { groqPool, hfPool } from '../ratelimit/keyPool.js';
 import { runGroqQueued } from '../ratelimit/queue.js';
 import type { ColumnProfile } from '../semantic/profiler.js';
-import { tryTemplateSql } from './sqlTemplates.js';
+import { quotePgIdent, tryTemplateSql } from './sqlTemplates.js';
 import { validateSql } from './sqlValidator.js';
 
 export type SqlGenerationPath = 'hf' | 'groq_maverick' | 'template';
@@ -33,10 +33,12 @@ const HF_SQL_TIMEOUT_MS = 8000;
 const GROQ_SQL_TIMEOUT_MS = 5000;
 
 /** Shared SQL-generation rules (user prompt + Groq system) — rates vs counts, time grain. */
-const SQL_ANSWERING_RULES = `Rates, ratios, and "per X": If the question asks for a rate, per order, per customer, complaints per order, churn rate, NPS, or any share/percentage, compute SUM(numerator_column)::numeric / NULLIF(SUM(denominator_column), 0) at the requested grain (with GROUP BY as needed), using exact column names from the schema. Do not use SUM of a single count column alone when a rate or "per" was asked—include the correct denominator (e.g. orders, active_customers) from the schema.
-Time grain: If the question refers to weeks, months, quarters, years, trends, "when", or compares periods, filter and/or GROUP BY the appropriate date columns from the schema (e.g. week_start_date, year, month, quarter)—do not return one global total when the question asks for a time breakdown or period-specific pattern.`;
+const SQL_ANSWERING_RULES = `Rates, ratios, and "per X": If the question asks for a rate, per order, per customer, complaints per order, churn rate, NPS, or any share/percentage, compute SUM(numerator_column)::numeric / NULLIF(SUM(denominator_column), 0) at the requested grain (with GROUP BY as needed), using the exact quoted identifiers from the schema for every column. Do not use SUM of a single count column alone when a rate or "per" was asked—include the correct denominator (e.g. orders, active_customers) from the schema.
+Time grain: If the question refers to weeks, months, quarters, years, trends, "when", or compares periods, filter and/or GROUP BY the appropriate date columns using their quoted names from the schema—do not return one global total when the question asks for a time breakdown or period-specific pattern.`;
 
 const GROQ_SQL_SYSTEM_PROMPT = `You output a single PostgreSQL SELECT statement only. No markdown, no explanation.
+
+Dataset columns are often quoted (e.g. "Employee Code") because names come from spreadsheet headers. Copy every column reference exactly as shown in the user schema block, including double quotes. Do not invent snake_case or run-together names (wrong: employeecode; right: "Employee Code" when that is the schema).
 
 ${SQL_ANSWERING_RULES}`;
 
@@ -48,14 +50,14 @@ function buildSqlCoderPrompt(params: {
 }): string {
   const colLines = params.columns.map(
     (c) =>
-      `${c.columnName} (${c.postgresType}) -- ${c.businessLabel}: ${c.description}`,
+      `${quotePgIdent(c.columnName)} (${c.postgresType}) -- ${c.businessLabel}: ${c.description}`,
   );
   return `### Task
 Generate a PostgreSQL SELECT query to answer the question.
 
 ### Database Schema
-Table: ${params.tableName}
-Columns:
+Table: ${quotePgIdent(params.tableName)}
+Columns (first token on each line is the exact PostgreSQL identifier — copy it verbatim, quotes included):
 ${colLines.join('\n')}
 
 ### Metric Definitions
@@ -63,7 +65,7 @@ ${params.metricDefinitions || 'None'}
 
 ### Constraints
 - SELECT only. No INSERT, UPDATE, DELETE, DROP, CREATE, or DDL.
-- Use exact column names from the schema above.
+- Column references must use the quoted identifiers from the schema lines above. Headers like Employee Code appear as "Employee Code" in SQL — not as employeecode or employee_code unless that exact spelling appears in the schema.
 - Use parameterised-style literals (no $1 $2 — inline safe values only).
 - Limit result rows to 100 maximum.
 - Handle NULL values with COALESCE where appropriate.

@@ -28,6 +28,10 @@ const envSchema = z.object({
   GROQ_MODEL_PLANNER: z.string().min(1),
   GROQ_MODEL_NARRATOR: z.string().min(1),
   GROQ_MODEL_SQL_FALLBACK: z.string().min(1),
+  /** Groq model for contextual follow-up suggestions; empty → GROQ_MODEL_NARRATOR. */
+  GROQ_MODEL_FOLLOWUPS: z.string().optional().default(''),
+  /** Max time for one follow-up generation Groq call (ms). */
+  FOLLOW_UP_TIMEOUT_MS: z.coerce.number().int().positive().default(10_000),
 
   GEMINI_API_KEY_1: z.string().min(1),
   GEMINI_API_KEY_2: z.string().default(''),
@@ -45,6 +49,13 @@ const envSchema = z.object({
 
   /** Comma-separated extra CORS origins (e.g. https://app.vercel.app). Localhost defaults are always allowed in server.ts. */
   CORS_ORIGINS: z.string().optional().default(''),
+
+  /** When true, skip Groq PII agent and use heuristic fallback only. */
+  PII_AGENT_DISABLED: boolFromEnv,
+  /** Max time for one PII agent Groq call (ms). */
+  PII_AGENT_TIMEOUT_MS: z.coerce.number().int().positive().default(45_000),
+  /** Groq model for PII column detection; empty → same as GROQ_MODEL_PLANNER. */
+  GROQ_MODEL_PII: z.string().optional().default(''),
 });
 
 const parsed = envSchema.safeParse(process.env);

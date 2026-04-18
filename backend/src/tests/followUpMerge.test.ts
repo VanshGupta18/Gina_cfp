@@ -1,9 +1,8 @@
 import assert from 'node:assert';
 import { test } from 'node:test';
 import type { ColumnProfile } from '../semantic/profiler.js';
-import { buildFollowUpSuggestions } from '../pipeline/followUpTemplates.js';
+import { mergeFollowUpsWithHeuristic } from '../pipeline/followUpNarrator.js';
 
-/** Phase 7 Person A — 0-row SQL path still returns follow-ups when schema has amount/category/date signals. */
 const richColumns: ColumnProfile[] = [
   {
     columnName: 'date',
@@ -43,7 +42,23 @@ const richColumns: ColumnProfile[] = [
   },
 ];
 
-test('buildFollowUpSuggestions returns 2–3 items for typical SME schema', () => {
-  const s = buildFollowUpSuggestions(richColumns, 'simple_query');
-  assert.ok(s.length >= 2 && s.length <= 3, `got ${s.length} suggestions`);
+test('mergeFollowUpsWithHeuristic returns heuristics when primary is empty', () => {
+  const m = mergeFollowUpsWithHeuristic([], richColumns, 'simple_query');
+  assert.ok(m.length >= 2 && m.length <= 3);
+});
+
+test('mergeFollowUpsWithHeuristic keeps two model strings without padding past three', () => {
+  const m = mergeFollowUpsWithHeuristic(
+    ['What drove Q1?', 'Compare regions next'],
+    richColumns,
+    'simple_query',
+  );
+  assert.strictEqual(m.length, 2);
+  assert.strictEqual(m[0], 'What drove Q1?');
+});
+
+test('mergeFollowUpsWithHeuristic pads when model returns only one string', () => {
+  const m = mergeFollowUpsWithHeuristic(['Only one question'], richColumns, 'simple_query');
+  assert.strictEqual(m.length, 3);
+  assert.strictEqual(m[0], 'Only one question');
 });

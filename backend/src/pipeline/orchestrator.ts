@@ -13,7 +13,6 @@ import {
   incrementResponseCacheHits,
   storeResponseCache,
 } from '../cache/responseCache.js';
-import type { PlannerIntent } from './planner.js';
 import { generateSql, type SqlGenerationPath } from './sqlGenerator.js';
 import { runPlanner } from './planner.js';
 import { validateSql } from './sqlValidator.js';
@@ -25,6 +24,7 @@ import {
   generateExplanation,
   generateNarration,
 } from './narrator.js';
+import { generateContextualFollowUps } from './followUpNarrator.js';
 import { buildResultTable } from './resultTableSerialize.js';
 import { getSnapshotMode } from '../snapshots/snapshotMode.js';
 import {
@@ -35,6 +35,8 @@ import {
 import { logPipelineRun, type PipelineRunInput } from '../telemetry/pipelineLogger.js';
 
 export type { QueryResultPayload };
+
+export { buildFollowUpSuggestions } from './followUpTemplates.js';
 
 function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -183,49 +185,6 @@ function buildCitationChips(rows: ResultRow[], relevantColumns: string[]): strin
     !fromRelevant.some((c) => c.toLowerCase() === k.toLowerCase()),
   );
   return [...fromRelevant, ...extra].slice(0, 5);
-}
-
-/** Exported for Phase 7 — empty SQL results still ship 2–3 follow-ups when schema supports them. */
-export function buildFollowUpSuggestions(
-  columns: ColumnProfile[],
-  intent: PlannerIntent | undefined,
-): string[] {
-  const suggestions: string[] = [];
-  const hasDate = columns.some((c) => c.semanticType === 'date');
-  const hasCategory = columns.some((c) => c.semanticType === 'category');
-  const hasAmount = columns.some((c) => c.semanticType === 'amount');
-  const catCol = columns.find((c) => c.semanticType === 'category');
-  const amtCol = columns.find((c) => c.semanticType === 'amount');
-
-  if (hasDate && hasAmount) {
-    suggestions.push(
-      `How has ${amtCol?.businessLabel ?? 'spending'} changed month over month?`,
-    );
-  }
-  if (hasCategory && hasAmount) {
-    suggestions.push(
-      `Which ${catCol?.businessLabel ?? 'category'} has the highest ${amtCol?.businessLabel ?? 'total'}?`,
-    );
-  }
-  if (hasCategory && hasAmount && hasDate) {
-    suggestions.push(
-      `Compare ${amtCol?.businessLabel ?? 'spending'} across ${catCol?.businessLabel ?? 'categories'} this year.`,
-    );
-  }
-  if (suggestions.length < 3 && hasAmount) {
-    suggestions.push(`What is the average ${amtCol?.businessLabel ?? 'amount'}?`);
-  }
-  if (suggestions.length < 3 && hasCategory) {
-    suggestions.push(`How many unique ${catCol?.businessLabel ?? 'categories'} are there in total?`);
-  }
-  if (suggestions.length < 3) {
-    suggestions.push('Show me the top 5 rows by value.');
-  }
-  if (suggestions.length < 3) {
-    suggestions.push('What is the total count of records?');
-  }
-  void intent;
-  return suggestions.slice(0, 3);
 }
 
 // ─── Persistence helpers ──────────────────────────────────────────────────────
@@ -506,6 +465,15 @@ export async function runQueryOrchestration(input: QueryOrchestrationInput): Pro
         plan.conversationalReply?.trim() ||
         "I'm here to help you explore this dataset. Ask a question about your data in plain English.";
       await sendStep(reply, { step: 'narration', status: 'complete', detail: 'Done' });
+      const followUpSuggestions = await generateContextualFollowUps({
+        question,
+        narrative: text,
+        understandingCard: understandingCard ?? '',
+        columns,
+        relevantColumns: plan.relevantColumns,
+        intent: plan.intent,
+        rowCount: 0,
+      });
       const conversationalPayload: QueryResultPayload = {
         messageId: randomUUID(),
         narrative: text,
@@ -517,7 +485,7 @@ export async function runQueryOrchestration(input: QueryOrchestrationInput): Pro
         secondarySql: null,
         rowCount: 0,
         confidenceScore: 100,
-        followUpSuggestions: buildFollowUpSuggestions(columns, plan.intent),
+        followUpSuggestions,
         autoInsights: [],
         cacheHit: false,
         snapshotUsed: false,
@@ -562,6 +530,15 @@ export async function runQueryOrchestration(input: QueryOrchestrationInput): Pro
             : JSON.stringify(plan.cacheAnswer)
           : 'Here is the follow-up based on your previous result.';
       await sendStep(reply, { step: 'narration', status: 'complete', detail: 'Done' });
+      const followUpSuggestions = await generateContextualFollowUps({
+        question,
+        narrative: cacheText,
+        understandingCard: understandingCard ?? '',
+        columns,
+        relevantColumns: plan.relevantColumns,
+        intent: plan.intent,
+        rowCount: 0,
+      });
       const followUpPayload: QueryResultPayload = {
         messageId: randomUUID(),
         narrative: cacheText,
@@ -573,7 +550,7 @@ export async function runQueryOrchestration(input: QueryOrchestrationInput): Pro
         secondarySql: null,
         rowCount: 0,
         confidenceScore: 90,
-        followUpSuggestions: buildFollowUpSuggestions(columns, plan.intent),
+        followUpSuggestions,
         autoInsights: [],
         cacheHit: true,
         snapshotUsed: false,
@@ -708,6 +685,7 @@ export async function runQueryOrchestration(input: QueryOrchestrationInput): Pro
 
     // ── Person A: chart type (§9) ──
     const chartType = selectChartType(rows, plan.intent, question);
+    const keyFigure = extractKeyFigure(rows, chartType);
 
     const shapeFp = resultShapeFingerprint(rows, gen.sql);
     const narrCacheKey = narrationCacheKey(plan.intent, shapeFp);
@@ -755,32 +733,51 @@ export async function runQueryOrchestration(input: QueryOrchestrationInput): Pro
     }
     await sendStep(reply, { step: 'narration', status: 'complete', detail: 'Done' });
 
+    const followUpBase = {
+      question,
+      narrative,
+      understandingCard: understandingCard ?? '',
+      columns,
+      relevantColumns: plan.relevantColumns,
+      intent: plan.intent,
+      rowCount: rows.length,
+      sql: gen.sql,
+      keyFigure,
+      sampleRows: rows,
+    };
+
     const explanationLabels = columnLabelsForExplanation(plan.relevantColumns, columns);
 
     let explanation = '';
+    let followUpSuggestions: string[] = [];
+
     if (rows.length === 0) {
       explanation = emptyResultExplanation({
         question,
         relevantColumns: plan.relevantColumns,
         columnLabels: explanationLabels,
       });
+      followUpSuggestions = await generateContextualFollowUps(followUpBase);
     } else if (!narrationCacheHit) {
-      explanation = await generateExplanation({
-        question,
-        understandingCard: understandingCard ?? '',
-        relevantColumns: plan.relevantColumns,
-        columnLabels: explanationLabels,
-        narrative,
-        primaryRows: rows,
-        sql: gen.sql,
-      });
+      [explanation, followUpSuggestions] = await Promise.all([
+        generateExplanation({
+          question,
+          understandingCard: understandingCard ?? '',
+          relevantColumns: plan.relevantColumns,
+          columnLabels: explanationLabels,
+          narrative,
+          primaryRows: rows,
+          sql: gen.sql,
+        }),
+        generateContextualFollowUps(followUpBase),
+      ]);
+    } else {
+      followUpSuggestions = await generateContextualFollowUps(followUpBase);
     }
 
     // ── Person A: output payload assembly ──
     const chartData = buildChartData(rows, chartType);
-    const keyFigure = extractKeyFigure(rows, chartType);
     const citationChips = buildCitationChips(rows, plan.relevantColumns);
-    const followUpSuggestions = buildFollowUpSuggestions(columns, plan.intent);
 
     const messageId = randomUUID();
     const outputPayload: QueryResultPayload = {

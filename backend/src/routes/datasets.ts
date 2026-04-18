@@ -1,9 +1,11 @@
 import { createHash, randomUUID } from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
-import { bufferToCsvText, parseCSV } from '../utils/csvParser.js';
+import { parseCSV } from '../utils/csvParser.js';
 import type { ParsedCSV } from '../utils/csvParser.js';
-import { parseIngestionPayloadJson, type IngestionPayload } from '../utils/uploadIngestion.js';
+import { parseUploadToSheets } from '../ingestion/parseUploadFile.js';
+import { runPiiForSheet } from '../pii/runPiiShield.js';
+import { redactedSheetsToXlsxBuffer } from '../pii/rebuildWorkbook.js';
 import {
   ensureUniqueDatasetDisplayName,
   displayNameForSheet,
@@ -621,7 +623,7 @@ export default async function datasetsRoutes(fastify: FastifyInstance) {
   });
 
   // ── POST /api/datasets/upload ──────────────────────────────────────────────
-  // multipart: field `file` = original bytes (S3 + hash); optional field `ingestion` = JSON with redacted CSV per sheet
+  // multipart: field `file` = user upload; server parses, redacts PII (agent + heuristic fallback), stores redacted-only bytes in S3
   fastify.post('/datasets/upload', async (request, reply) => {
     type FilePart = {
       file: AsyncIterable<Buffer | Uint8Array>;
@@ -645,7 +647,6 @@ export default async function datasetsRoutes(fastify: FastifyInstance) {
     let fileBuffer: Buffer | undefined;
     let filename = 'upload.csv';
     let mimetype = 'text/csv';
-    let ingestionRaw: string | undefined;
 
     try {
       for await (const part of request.parts()) {
@@ -656,9 +657,6 @@ export default async function datasetsRoutes(fastify: FastifyInstance) {
           fileBuffer = buf;
           filename = part.filename ?? 'upload.csv';
           mimetype = part.mimetype ?? 'text/csv';
-        } else if (part.type === 'field' && part.fieldname === 'ingestion') {
-          ingestionRaw =
-            typeof part.value === 'string' ? part.value : String(part.value ?? '');
         }
       }
     } catch (e: unknown) {
@@ -741,53 +739,81 @@ export default async function datasetsRoutes(fastify: FastifyInstance) {
       });
     }
 
-    let ingestion: IngestionPayload | undefined;
-    if (ingestionRaw !== undefined && ingestionRaw.trim() !== '') {
-      try {
-        ingestion = parseIngestionPayloadJson(ingestionRaw);
-      } catch (e) {
-        if (e instanceof z.ZodError) {
-          return reply.status(400).send({ error: 'Invalid ingestion payload', details: e.flatten() });
-        }
-        return reply.status(400).send({
-          error: 'Invalid ingestion JSON',
-          message: e instanceof Error ? e.message : String(e),
-        });
-      }
-    }
-
-    if (isExcelFilename(filename) && !ingestion) {
-      return reply.status(400).send({
-        error: 'Excel uploads require an ingestion payload from the app',
-        hint: 'Multipart field "ingestion" must contain JSON with version 1 and a sheets array.',
-      });
-    }
-
     type SheetIn = { sheetName: string; csv: string };
     let sheetsIn: SheetIn[] = [];
 
-    if (ingestion && ingestion.sheets.length > 0) {
-      sheetsIn = ingestion.sheets;
-    } else if (!ingestion && isCsvFilename(filename)) {
-      const csvText = bufferToCsvText(fileBuffer);
-      const parsedProbe = parseCSV(csvText);
+    let rawSheets: ReturnType<typeof parseUploadToSheets>;
+    try {
+      rawSheets = parseUploadToSheets(fileBuffer, filename);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      if (msg === 'NO_SHEETS') {
+        return reply.status(400).send({ error: 'No non-empty sheets found in this workbook' });
+      }
+      if (msg === 'UNSUPPORTED_FILE_TYPE') {
+        return reply.status(400).send({ error: 'Unsupported file type' });
+      }
+      fastify.log.error({ err: e }, 'parseUploadToSheets');
+      return reply.status(400).send({
+        error: 'Could not read uploaded file',
+        message: msg,
+      });
+    }
+
+    const redactedForDb: SheetIn[] = [];
+    let totalPiiRedactions = 0;
+    const allRedactedColumnLabels: string[] = [];
+    const piiItems: Array<{ columnKey: string; reason: string; label?: string }> = [];
+    let anyFallback = false;
+
+    for (const s of rawSheets) {
+      const prefix = s.sheetName === '_' ? '_' : s.sheetName;
+      const pii = await runPiiForSheet(s.csv, s.sheetName, prefix);
+      redactedForDb.push({ sheetName: s.sheetName, csv: pii.redactedCsv });
+      totalPiiRedactions += pii.totalRedactions;
+      for (const c of pii.redactedColumns) {
+        allRedactedColumnLabels.push(prefix === '_' ? c : `${prefix}: ${c}`);
+      }
+      piiItems.push(...pii.items);
+      if (pii.method === 'fallback') anyFallback = true;
+    }
+
+    sheetsIn = redactedForDb;
+
+    for (const s of sheetsIn) {
+      const parsedProbe = parseCSV(s.csv);
       if (parsedProbe.headers.length === 0) {
         return reply.status(400).send({
-          error: 'CSV has no headers',
+          error: `Sheet "${s.sheetName}" has no headers`,
           hint:
             'The first row must be comma-separated column names. If you exported from Excel, choose "CSV UTF-8 (Comma delimited)".',
         });
       }
       if (parsedProbe.rows.length === 0) {
-        return reply.status(400).send({ error: 'CSV has no data rows' });
+        return reply.status(400).send({ error: `Sheet "${s.sheetName}" has no data rows` });
       }
-      sheetsIn = [{ sheetName: '_', csv: csvText }];
-    } else {
-      return reply.status(400).send({
-        error: 'Missing or invalid ingestion',
-        hint:
-          'Send multipart field "ingestion" (JSON) with redacted CSV per sheet, or upload a plain .csv without ingestion.',
-      });
+    }
+
+    const piiSummaryOut = {
+      redactedColumns: allRedactedColumnLabels,
+      totalRedactions: totalPiiRedactions,
+      items: piiItems,
+      method: anyFallback ? ('fallback' as const) : ('agent' as const),
+    };
+
+    const uploadBatchId = randomUUID();
+    const safeOriginalName = sanitizeFilenameForDisplay(filename);
+    const s3Key = `uploads/${request.userId}/${uploadBatchId}/${safeOriginalName}`;
+
+    const s3Body: Buffer = isCsvFilename(filename)
+      ? Buffer.from(sheetsIn[0]!.csv, 'utf8')
+      : redactedSheetsToXlsxBuffer(sheetsIn);
+
+    try {
+      await uploadToS3(fastify.s3, s3Key, s3Body, guessS3ContentType(filename));
+    } catch (err) {
+      fastify.log.error({ err }, 'S3 upload failed');
+      return reply.status(502).send({ error: 'File storage unavailable' });
     }
 
     type SheetPlan = {
@@ -854,17 +880,6 @@ export default async function datasetsRoutes(fastify: FastifyInstance) {
       });
     }
 
-    const uploadBatchId = randomUUID();
-    const safeOriginalName = sanitizeFilenameForDisplay(filename);
-    const s3Key = `uploads/${request.userId}/${uploadBatchId}/${safeOriginalName}`;
-
-    try {
-      await uploadToS3(fastify.s3, s3Key, fileBuffer, guessS3ContentType(filename));
-    } catch (err) {
-      fastify.log.error({ err }, 'S3 upload failed');
-      return reply.status(502).send({ error: 'File storage unavailable' });
-    }
-
     const { rows: nameRows } = await fastify.db.query<{ name: string }>(
       `SELECT name FROM datasets WHERE user_id = $1::uuid AND is_demo = false`,
       [request.userId],
@@ -873,8 +888,6 @@ export default async function datasetsRoutes(fastify: FastifyInstance) {
     for (const plan of sheetPlans) {
       plan.displayName = ensureUniqueDatasetDisplayName(plan.displayName, takenNames);
     }
-
-    const piiSummaryOut = ingestion?.piiSummary ?? { redactedColumns: [] as string[], totalRedactions: 0 };
 
     const client = await fastify.db.connect();
     type ResultRow = {

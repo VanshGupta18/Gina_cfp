@@ -2,7 +2,8 @@ import type { ColumnProfile } from '../semantic/profiler.js';
 
 /** §6.4 — deterministic templates + semantic-type column binding. */
 
-function qIdent(name: string): string {
+/** Double-quote a PostgreSQL identifier (matches dynamic dataset column names from CSV headers). */
+export function quotePgIdent(name: string): string {
   return `"${name.replace(/"/g, '""')}"`;
 }
 
@@ -56,27 +57,27 @@ export function tryTemplateSql(
   columns: ColumnProfile[],
 ): string | null {
   const q = question.trim();
-  const t = qIdent(tableName);
+  const t = quotePgIdent(tableName);
   const b = bindSemanticColumns(columns);
 
   if (matchTopN(q) && b.category && b.amount) {
-    return `SELECT ${qIdent(b.category)}, SUM(${qIdent(b.amount)}) AS total FROM ${t} GROUP BY ${qIdent(
+    return `SELECT ${quotePgIdent(b.category)}, SUM(${quotePgIdent(b.amount)}) AS total FROM ${t} GROUP BY ${quotePgIdent(
       b.category,
     )} ORDER BY total DESC LIMIT 5`;
   }
 
   if (matchSum(q) && b.amount) {
-    return `SELECT SUM(${qIdent(b.amount)}) AS total FROM ${t}`;
+    return `SELECT SUM(${quotePgIdent(b.amount)}) AS total FROM ${t}`;
   }
 
   if (matchCompare(q) && b.category && b.amount) {
-    return `SELECT ${qIdent(b.category)}, SUM(${qIdent(b.amount)}) AS total FROM ${t} GROUP BY ${qIdent(
+    return `SELECT ${quotePgIdent(b.category)}, SUM(${quotePgIdent(b.amount)}) AS total FROM ${t} GROUP BY ${quotePgIdent(
       b.category,
     )}`;
   }
 
   if (matchTrend(q) && b.date && b.amount) {
-    return `SELECT DATE_TRUNC('month', ${qIdent(b.date)}::date) AS period, SUM(${qIdent(
+    return `SELECT DATE_TRUNC('month', ${quotePgIdent(b.date)}::date) AS period, SUM(${quotePgIdent(
       b.amount,
     )}) AS total FROM ${t} GROUP BY period ORDER BY period`;
   }

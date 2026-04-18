@@ -37,8 +37,8 @@ const steps = [
     title: 'Auto PII Redaction',
     subtitle: 'Privacy-first by design',
     description:
-      'Before any data leaves your browser, G.I.N.A automatically scans and redacts personally identifiable information — names, emails, phone numbers, SSNs — so your sensitive data stays safe.',
-    highlights: ['Names & emails redacted', 'GDPR & CCPA aligned', 'Zero raw PII sent to AI'],
+      'When you upload a file, G.I.N.A scans it on the server and redacts personally identifiable information — names, emails, phone numbers, SSNs — before storage and analysis, so sensitive values are not kept at rest in raw form.',
+    highlights: ['Names & emails redacted', 'GDPR & CCPA aligned', 'Redacted data for AI & SQL'],
     color: 'from-emerald-500 to-teal-500',
     glow: 'rgba(16,185,129,0.25)',
   },

@@ -2,16 +2,16 @@
 
 import React, { useState, useRef, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import { prepareIngestionFromFile, type IngestionPayloadV1 } from '@/lib/pii/prepareIngestion';
 import { uploadDataset } from '@/lib/api/datasets';
 import { createConversation } from '@/lib/api/conversations';
 import { useDatasets } from '@/lib/hooks/useDatasets';
 import PIISummaryBanner from './PIISummaryBanner';
 import UnderstandingCard from './UnderstandingCard';
 import { InlineCorrectionPanel } from '@/components/semantic/InlineCorrectionPanel';
-import { UploadCloud, ShieldAlert, CheckCircle2, ChevronRight, RotateCcw } from 'lucide-react';
+import { UploadCloud, ShieldAlert, ChevronRight, RotateCcw } from 'lucide-react';
 import { Modal } from '@/components/ui/Modal';
 import { Button } from '@/components/ui/Button';
+import type { PiiSummary } from '@/types';
 
 interface UploadModalProps {
   onClose: () => void;
@@ -20,43 +20,39 @@ interface UploadModalProps {
 export default function UploadModal({ onClose }: UploadModalProps) {
   const { setActiveDataset, refreshDatasets } = useDatasets();
   const router = useRouter();
-  
+
   const [isDragging, setIsDragging] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  
-  // Custom states for steps (01 Intake, 02 Risk, 03 Mapping)
+
   const [step, setStep] = useState<1 | 2 | 3>(1);
-  const [redactedColumns, setRedactedColumns] = useState<string[]>([]);
-  const [ingestionMemo, setIngestionMemo] = useState<IngestionPayloadV1 | null>(null);
+  const [piiSummary, setPiiSummary] = useState<PiiSummary | null>(null);
   const [originalFileMemo, setOriginalFileMemo] = useState<File | null>(null);
   const [understandingCard, setUnderstandingCard] = useState<string | null>(null);
   const [uploadedDatasetId, setUploadedDatasetId] = useState<string | null>(null);
   const [correctionModalOpen, setCorrectionModalOpen] = useState(false);
-  const [fileDetails, setFileDetails] = useState<{name: string, size: string} | null>(null);
+  const [fileDetails, setFileDetails] = useState<{ name: string; size: string } | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Formatting utility for MB
   const formatBytes = (bytes: number, decimals = 2) => {
-      if (!+bytes) return '0 Bytes';
-      const k = 1024;
-      const dm = decimals < 0 ? 0 : decimals;
-      const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB', 'PB', 'EB', 'ZB', 'YB'];
-      const i = Math.floor(Math.log(bytes) / Math.log(k));
-      return `${parseFloat((bytes / Math.pow(k, i)).toFixed(dm))} ${sizes[i]}`;
-  }
+    if (!+bytes) return '0 Bytes';
+    const k = 1024;
+    const dm = decimals < 0 ? 0 : decimals;
+    const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB', 'PB', 'EB', 'ZB', 'YB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return `${parseFloat((bytes / Math.pow(k, i)).toFixed(dm))} ${sizes[i]}`;
+  };
 
   const performUpload = useCallback(
-    async (originalFile: File, ingestion: IngestionPayloadV1) => {
+    async (file: File) => {
       setIsProcessing(true);
       setError(null);
       try {
-        const result = await uploadDataset(originalFile, ingestion);
-
+        const result = await uploadDataset(file);
+        setPiiSummary(result.piiSummary);
         setUnderstandingCard(result.understandingCard);
         setUploadedDatasetId(result.dataset.id);
-
         setStep(3);
         await refreshDatasets();
       } catch (err: unknown) {
@@ -82,47 +78,33 @@ export default function UploadModal({ onClose }: UploadModalProps) {
       }
 
       setFileDetails({ name: file.name, size: formatBytes(file.size) });
-      setIsProcessing(true);
       setError(null);
-      setRedactedColumns([]);
+      setPiiSummary(null);
       setUploadedDatasetId(null);
       setCorrectionModalOpen(false);
-      setIngestionMemo(null);
-      setOriginalFileMemo(null);
-
-      try {
-        const ingestion = await prepareIngestionFromFile(file);
-        setRedactedColumns(ingestion.piiSummary.redactedColumns);
-        setIngestionMemo(ingestion);
-        setOriginalFileMemo(file);
-        setStep(2);
-
-        await performUpload(file, ingestion);
-      } catch (err: unknown) {
-        const message = err instanceof Error ? err.message : 'Failed to process and upload dataset';
-        setError(message);
-        setStep(1);
-        setIsProcessing(false);
-      }
+      setOriginalFileMemo(file);
+      setStep(2);
+      await performUpload(file);
     },
     [performUpload],
   );
 
   const handleStartAsking = async () => {
     if (!uploadedDatasetId) return;
-    
-    setIsProcessing(true); // Re-use processing state for button spin
+
+    setIsProcessing(true);
     try {
       setActiveDataset(uploadedDatasetId);
-      const newConv = await createConversation(uploadedDatasetId, "New Conversation");
+      const newConv = await createConversation(uploadedDatasetId, 'New Conversation');
       onClose();
       if (newConv) {
         router.push(`/app/${newConv.id}`);
       }
     } catch (e) {
       console.error(e);
-      // Fallback
       onClose();
+    } finally {
+      setIsProcessing(false);
     }
   };
 
@@ -161,15 +143,12 @@ export default function UploadModal({ onClose }: UploadModalProps) {
       isOpen={true}
       onClose={onClose}
       title={
-        step === 1 ? 'Upload a dataset' :
-        step === 2 ? 'Verify protection layers' :
-        'Analysis complete'
+        step === 1 ? 'Upload a dataset' : step === 2 ? 'Securing your upload' : 'Analysis complete'
       }
     >
       <div className="flex flex-col">
-        {/* Step indicator pills */}
         <div className="flex items-center gap-2 mb-8">
-          {[1,2,3].map((s) => (
+          {[1, 2, 3].map((s) => (
             <div
               key={s}
               className="h-1 rounded-full transition-all duration-300"
@@ -189,7 +168,6 @@ export default function UploadModal({ onClose }: UploadModalProps) {
           </div>
         )}
 
-        {/* STEP 1: INITIAL INTAKE */}
         {step === 1 && (
           <div className="flex flex-col gap-5">
             <div
@@ -260,20 +238,29 @@ export default function UploadModal({ onClose }: UploadModalProps) {
                 <ShieldAlert className="w-4 h-4" strokeWidth={2} />
               </div>
               <p className="text-sm text-slate-400 leading-relaxed">
-                PII automatically detected and redacted. Your data remains private and encrypted under G.I.N.A core security protocols.
+                On upload, G.I.N.A scans your file on the server, redacts sensitive fields, and only
+                stores protected data — aligned with G.I.N.A core security protocols.
               </p>
             </div>
 
             <div className="flex justify-end items-center mt-1">
-              <Button variant="ghost" onClick={onClose} className="mr-0 font-medium">Cancel</Button>
+              <Button variant="ghost" onClick={onClose} className="mr-0 font-medium">
+                Cancel
+              </Button>
             </div>
           </div>
         )}
 
-        {/* STEP 2: RISK MITIGATION */}
         {step === 2 && (
           <div className="flex flex-col gap-6 animate-in fade-in duration-500">
-            <PIISummaryBanner redactedColumns={redactedColumns} />
+            {isProcessing ? (
+              <div className="rounded-xl border border-white/10 bg-white/[0.02] p-8 flex flex-col items-center gap-4 text-center">
+                <div className="w-10 h-10 border-2 border-brand-indigo-light/30 border-t-brand-indigo-light rounded-full animate-spin" />
+                <p className="text-sm text-slate-300">
+                  Uploading and scanning for personally identifiable information…
+                </p>
+              </div>
+            ) : null}
 
             <div className="border border-emerald-500/30 border-dashed rounded-xl p-6 bg-emerald-500/[0.02] flex items-center justify-between">
               <div className="flex items-center gap-4">
@@ -281,59 +268,51 @@ export default function UploadModal({ onClose }: UploadModalProps) {
                   {fileDetails?.name?.toLowerCase().endsWith('.csv') ? 'CSV' : 'XLS'}
                 </div>
                 <div className="flex flex-col gap-1">
-                  <span className="text-base font-bold text-white">{fileDetails?.name || 'dataset.csv'}</span>
-                  <span className="text-sm text-slate-400">{fileDetails?.size || 'Unknown size'} · Ready for processing</span>
-                  
-                  {redactedColumns.length > 0 && (
-                    <div className="flex flex-wrap gap-2 mt-2">
-                      {redactedColumns.map(col => (
-                        <span key={col} className="px-2 py-0.5 rounded flex items-center text-xs font-mono bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                          {col}
-                        </span>
-                      ))}
-                    </div>
-                  )}
+                  <span className="text-base font-bold text-white">
+                    {fileDetails?.name || 'dataset.csv'}
+                  </span>
+                  <span className="text-sm text-slate-400">
+                    {fileDetails?.size || 'Unknown size'}
+                  </span>
                 </div>
               </div>
-              <CheckCircle2 className="w-6 h-6 text-emerald-400" />
             </div>
 
-            <p className="text-xs text-slate-500 italic">
-              *The identified columns contain pattern-matched sensitive information and have been masked for the session.*
-            </p>
-
             <div className="flex justify-between items-center mt-2">
-              <Button variant="ghost" onClick={() => setStep(1)} className="px-0 hover:bg-transparent">
+              <Button
+                variant="ghost"
+                onClick={() => {
+                  setStep(1);
+                  setError(null);
+                }}
+                className="px-0 hover:bg-transparent"
+              >
                 Go back
               </Button>
-              
-              {isProcessing ? (
-                <Button variant="primary" disabled className="gap-2">
-                  Processing <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"/>
-                </Button>
-              ) : (
+
+              {error && originalFileMemo ? (
                 <Button
                   variant="danger"
                   onClick={() => {
-                    if (originalFileMemo && ingestionMemo) {
-                      void performUpload(originalFileMemo, ingestionMemo);
-                    }
+                    void performUpload(originalFileMemo);
                   }}
+                  disabled={isProcessing}
                   className="gap-2"
                 >
-                  <RotateCcw className="w-4 h-4" /> Retry Upload
+                  <RotateCcw className="w-4 h-4" /> Retry upload
                 </Button>
-              )}
+              ) : null}
             </div>
           </div>
         )}
 
-        {/* STEP 3: INTELLIGENCE MAPPING */}
         {step === 3 && understandingCard && (
           <div className="flex flex-col gap-6 animate-in fade-in duration-500">
-            <UnderstandingCard 
-              text={understandingCard} 
-              onCorrectionClick={() => setCorrectionModalOpen((prev) => !prev)} 
+            {piiSummary ? <PIISummaryBanner summary={piiSummary} /> : null}
+
+            <UnderstandingCard
+              text={understandingCard}
+              onCorrectionClick={() => setCorrectionModalOpen((prev) => !prev)}
             />
             {correctionModalOpen && uploadedDatasetId && (
               <InlineCorrectionPanel
@@ -348,15 +327,31 @@ export default function UploadModal({ onClose }: UploadModalProps) {
             )}
 
             <div className="flex justify-between items-center mt-2 border-t border-surface-border pt-6">
-              <Button variant="ghost" onClick={() => setStep(1)} className="px-0 hover:bg-transparent">Upload another</Button>
-              <Button 
+              <Button
+                variant="ghost"
+                onClick={() => {
+                  setStep(1);
+                  setPiiSummary(null);
+                  setUnderstandingCard(null);
+                  setUploadedDatasetId(null);
+                  setOriginalFileMemo(null);
+                  setFileDetails(null);
+                }}
+                className="px-0 hover:bg-transparent"
+              >
+                Upload another
+              </Button>
+              <Button
                 variant="primary"
-                onClick={handleStartAsking} 
+                onClick={handleStartAsking}
                 disabled={isProcessing}
                 className="gap-2 group"
               >
                 {isProcessing ? (
-                  <>Starting... <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"/></>
+                  <>
+                    Starting...{' '}
+                    <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  </>
                 ) : (
                   <>
                     Start asking questions
@@ -367,7 +362,6 @@ export default function UploadModal({ onClose }: UploadModalProps) {
             </div>
           </div>
         )}
-
       </div>
     </Modal>
   );

@@ -6,7 +6,6 @@ import type {
   SemanticCorrection,
   DatasetPreviewResponse,
 } from '@/types';
-import type { IngestionPayloadV1 } from '@/lib/pii/prepareIngestion';
 
 /**
  * Datasets API endpoints
@@ -18,13 +17,12 @@ export async function listDatasets(): Promise<Dataset[]> {
 }
 
 /**
- * Upload original file + redacted per-sheet CSV JSON (`ingestion`).
- * Backend stores the original bytes in S3 as-is and ingests redacted CSVs.
+ * Upload a spreadsheet; the server parses it, runs PII redaction, stores redacted bytes in S3,
+ * and ingests redacted data for querying.
  */
-export async function uploadDataset(file: File, ingestion: IngestionPayloadV1): Promise<UploadResult> {
+export async function uploadDataset(file: File): Promise<UploadResult> {
   const formData = new FormData();
   formData.append('file', file);
-  formData.append('ingestion', JSON.stringify(ingestion));
 
   const response = await apiFetch<UploadResult>('/api/datasets/upload', {
     method: 'POST',
