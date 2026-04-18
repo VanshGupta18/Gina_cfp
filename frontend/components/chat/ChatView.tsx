@@ -145,7 +145,7 @@ export function ChatView() {
     return (
       <div className="flex flex-col relative h-full bg-[#0F121A]">
         <div
-          className="px-8 py-4 flex items-center justify-between sticky top-0 z-20"
+          className="px-8 py-4 flex items-center justify-between sticky top-0 z-10"
           style={{
             backdropFilter: 'blur(10px)',
             WebkitBackdropFilter: 'blur(10px)',
@@ -187,7 +187,7 @@ export function ChatView() {
   return (
     <div className="flex flex-col relative h-full bg-[#0F121A]">
       <div
-        className="px-8 py-4 flex items-center justify-between sticky top-0 z-20"
+        className="px-8 py-4 flex items-center justify-between sticky top-0 z-10"
         style={{
           backdropFilter: 'blur(10px)',
           WebkitBackdropFilter: 'blur(10px)',

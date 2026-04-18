@@ -36,29 +36,36 @@ export default function TopBar({ onMenuClick }: TopBarProps) {
 
   return (
     <header
-      className="relative z-[70] flex h-14 shrink-0 items-center gap-3 px-3 md:px-4"
-      style={{
-        backdropFilter: 'blur(12px)',
-        WebkitBackdropFilter: 'blur(12px)',
-        background: 'rgba(10, 13, 20, 0.88)',
-        borderBottom: '1px solid rgba(255,255,255,0.07)',
-      }}
+      className="w-full border-b border-white/5 py-4 px-8 flex items-center justify-between z-20 sticky top-0 bg-surface/80 backdrop-blur-md"
     >
-      <button
-        type="button"
-        onClick={onMenuClick}
-        className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-slate-300 transition-colors hover:bg-white/5 hover:text-white md:hidden"
-        aria-label="Open conversations"
-      >
-        <Menu className="h-5 w-5" />
-      </button>
+      <div className="flex items-center gap-4 md:gap-8">
+        <button
+          type="button"
+          onClick={onMenuClick}
+          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-slate-300 transition-colors hover:bg-white/5 hover:text-white md:hidden"
+          aria-label="Open conversations"
+        >
+          <Menu className="h-5 w-5" />
+        </button>
 
-      <Link href="/app" className="group shrink-0 flex items-center gap-1.5">
-        <Sparkles className="h-4 w-4 text-brand-indigo-light opacity-70 group-hover:opacity-100 transition-opacity" />
-        <span className="text-sm font-bold tracking-tight text-white md:text-base">G.I.N.A</span>
-      </Link>
+        <Link href="/app" className="group shrink-0 flex items-center gap-2">
+          <span className="text-xl font-bold tracking-tight text-white">G.I.N.A</span>
+        </Link>
 
-      <div className="flex shrink-0 items-center gap-2 ml-auto">
+        {/* Live Demo Badge Link */}
+        <Link
+          href="/live-demo"
+          className="group flex items-center gap-2 rounded-full border border-brand-indigo/30 bg-brand-indigo/10 px-3 py-1 hover:border-brand-indigo/60 hover:bg-brand-indigo/20 transition-all duration-300 shadow-[0_0_10px_rgba(90,78,227,0.1)] hover:shadow-[0_0_16px_rgba(90,78,227,0.25)]"
+        >
+          <span className="relative flex h-2 w-2">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-brand-indigo-light opacity-75"></span>
+            <span className="relative inline-flex rounded-full h-2 w-2 bg-brand-indigo-light"></span>
+          </span>
+          <span className="text-[10px] font-black tracking-[0.15em] text-brand-indigo-light uppercase group-hover:text-white transition-colors">Live Demo</span>
+        </Link>
+      </div>
+
+      <div className="flex items-center gap-6">
         <div className="relative" ref={userRef}>
           <button
             type="button"

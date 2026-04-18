@@ -90,6 +90,24 @@ function AppShellContent({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="flex h-screen w-full flex-col bg-surface overflow-hidden">
+      {/* Marquee Banner - Only on Welcome Page */}
+      {isWelcomePage && (
+        <div className="w-full bg-brand-indigo text-xs font-semibold tracking-widest uppercase py-2.5 overflow-hidden whitespace-nowrap border-b border-brand-indigo-light/20 flex flex-row items-center text-white/90">
+          <div className="animate-marquee inline-flex gap-8 px-4">
+            <span>GET INSTANT INSIGHTS →</span>
+            <span>POWERED BY REAL SQL EXECUTION →</span>
+            <span>PII AUTOMATICALLY REDACTED BEFORE UPLOAD →</span>
+            <span>ASK YOUR DATA ANYTHING IN PLAIN ENGLISH →</span>
+            <span>NO SQL →</span>
+            <span>GET INSTANT INSIGHTS →</span>
+            <span>POWERED BY REAL SQL EXECUTION →</span>
+            <span>PII AUTOMATICALLY REDACTED BEFORE UPLOAD →</span>
+            <span>ASK YOUR DATA ANYTHING IN PLAIN ENGLISH →</span>
+            <span>NO SQL →</span>
+          </div>
+        </div>
+      )}
+      
       <TopBar onMenuClick={() => setMobileRailOpen(true)} />
 
       <div className="flex min-h-0 flex-1 overflow-hidden">

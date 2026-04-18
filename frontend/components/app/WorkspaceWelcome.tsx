@@ -69,7 +69,17 @@ export default function WorkspaceWelcome() {
   }, [currentStep, displayedText]);
 
   return (
-    <div className="flex flex-1 flex-col overflow-y-auto bg-surface animate-fade-in relative">
+    <div 
+      className="flex flex-1 flex-col overflow-y-auto animate-fade-in relative"
+      style={{
+        background: `
+          radial-gradient(circle at 2px 2px, rgba(255,255,255,0.15) 1px, transparent 1px),
+          #0a0d14
+        `,
+        backgroundSize: '32px 32px',
+        backgroundAttachment: 'fixed',
+      }}
+    >
       <style>{`
         @keyframes bounce {
           0%, 100% { transform: translateY(0); opacity: 1; }
@@ -84,55 +94,59 @@ export default function WorkspaceWelcome() {
           100% { opacity: 1; }
         }
       `}</style>
-      {/* Background mesh gradient */}
-      <div className="absolute inset-0 pointer-events-none overflow-hidden">
-        <div className="absolute -top-40 -right-40 h-80 w-80 rounded-full bg-gradient-to-br from-brand-indigo/5 to-transparent blur-3xl" />
-        <div className="absolute -bottom-40 -left-40 h-80 w-80 rounded-full bg-gradient-to-tr from-brand-teal/5 to-transparent blur-3xl" />
-      </div>
-      
-      <div className="mx-auto w-full max-w-3xl px-6 py-12 md:py-16 relative z-10">
 
-        {/* Hero */}
-        <div
-          className="mb-2 inline-flex items-center gap-2 rounded-full px-3 py-1 text-[11px] font-bold uppercase tracking-widest"
-          style={{
-            background: 'rgba(90,78,227,0.10)',
-            border: '1px solid rgba(90,78,227,0.25)',
-            color: '#7267F2',
-          }}
-        >
-          <Sparkles className="h-3.5 w-3.5" />
-          Workspace
+      <div className="mx-auto w-full max-w-4xl px-6 py-12 md:py-16 relative z-10">
+
+        {/* Hero Section */}
+        <div className="mb-12">
+          <div
+            className="mb-4 inline-flex items-center gap-2 rounded-full px-4 py-1.5 text-[11px] font-bold uppercase tracking-widest"
+            style={{
+              background: 'rgba(90,78,227,0.12)',
+              border: '1px solid rgba(90,78,227,0.3)',
+              color: '#7267F2',
+            }}
+          >
+            <Sparkles className="h-3.5 w-3.5" />
+            Workspace
+          </div>
+
+          <h1 className="mt-6 flex flex-col gap-2">
+            <span className="font-serif text-5xl md:text-6xl font-light text-slate-200 tracking-tight">
+              Welcome to
+            </span>
+            <span className="text-6xl md:text-7xl font-bold tracking-tight text-white leading-none">
+              G.I.N.A
+            </span>
+          </h1>
+          <p className="mt-6 max-w-2xl text-lg md:text-xl leading-relaxed text-slate-300 font-medium">
+            Upload your own CSV or explore demo datasets to start asking questions in plain English. Get instant, AI-powered insights without writing a single line of SQL.
+          </p>
         </div>
 
-        <h1 className="mt-5 font-serif text-4xl md:text-5xl font-light tracking-tight text-slate-100">
-          Welcome to{' '}
-          <span className="text-shimmer font-semibold">G.I.N.A</span>
-        </h1>
-        <p className="mt-4 max-w-2xl text-base leading-relaxed text-slate-400">
-          Upload your own CSV or explore demo datasets to start asking questions in plain English.
-        </p>
-
         {/* Upload CTA */}
-        <div className="mt-10">
+        <div className="mt-10 flex flex-col sm:flex-row gap-4">
           <button
             type="button"
             onClick={openUploadModal}
-            className="inline-flex items-center justify-center gap-2 rounded-lg px-6 py-3 text-sm font-semibold text-white transition-all duration-200 hover:shadow-lg"
+            className="inline-flex items-center justify-center gap-2 rounded-lg px-8 py-3.5 text-base font-semibold text-white transition-all duration-200 hover:shadow-lg w-full sm:w-auto"
             style={{
               background: 'linear-gradient(135deg, #5A4EE3, #3CE0D6)',
-              boxShadow: '0 4px 20px rgba(90,78,227,0.2)',
+              boxShadow: '0 4px 24px rgba(90,78,227,0.25)',
             }}
             onMouseEnter={(e) => {
-              (e.currentTarget as HTMLButtonElement).style.boxShadow = '0 8px 32px rgba(90,78,227,0.35)';
+              (e.currentTarget as HTMLButtonElement).style.boxShadow = '0 8px 32px rgba(90,78,227,0.4)';
             }}
             onMouseLeave={(e) => {
-              (e.currentTarget as HTMLButtonElement).style.boxShadow = '0 4px 20px rgba(90,78,227,0.2)';
+              (e.currentTarget as HTMLButtonElement).style.boxShadow = '0 4px 24px rgba(90,78,227,0.25)';
             }}
           >
-            <UploadCloud className="h-4 w-4" />
+            <UploadCloud className="h-5 w-5" />
             Upload a CSV
           </button>
+          <p className="text-sm text-slate-400 flex items-center">
+            Free to start · No credit card required
+          </p>
         </div>
 
         {/* Visual Onboarding - One Line */}
@@ -375,14 +389,14 @@ export default function WorkspaceWelcome() {
         </div>
 
         {/* User datasets */}
-        <section className="mt-16">
-          <h2 className="mb-4 flex items-center gap-2">
+        <section className="mt-20">
+          <h2 className="mb-6 flex items-center gap-3">
             <span
-              className="h-4 w-0.5 rounded-full"
+              className="h-5 w-0.5 rounded-full"
               style={{ background: 'linear-gradient(to bottom, #3CE0D6, #5A4EE3)' }}
             />
-            <UploadCloud className="h-3.5 w-3.5 text-slate-600" />
-            <span className="text-[11px] font-semibold uppercase tracking-[0.15em] text-slate-500">
+            <UploadCloud className="h-4 w-4 text-slate-600" />
+            <span className="text-[11px] font-bold uppercase tracking-[0.2em] text-slate-400">
               Your datasets
             </span>
           </h2>
@@ -470,15 +484,15 @@ export default function WorkspaceWelcome() {
 
         {/* Demo datasets */}
         {demoDatasets.length > 0 && (
-          <section className="mt-16">
-            <h2 className="mb-4 flex items-center gap-2">
+          <section className="mt-20">
+            <h2 className="mb-6 flex items-center gap-3">
               <span
-                className="h-4 w-0.5 rounded-full"
+                className="h-5 w-0.5 rounded-full"
                 style={{ background: 'linear-gradient(to bottom, #5A4EE3, #3CE0D6)' }}
               />
-              <Database className="h-3.5 w-3.5 text-slate-600" />
-              <span className="text-[11px] font-semibold uppercase tracking-[0.15em] text-slate-500">
-                Demo datasets
+              <Database className="h-4 w-4 text-slate-600" />
+              <span className="text-[11px] font-bold uppercase tracking-[0.2em] text-slate-400">
+                Try demo datasets
               </span>
             </h2>
             <ul className="grid gap-3 sm:grid-cols-2">
