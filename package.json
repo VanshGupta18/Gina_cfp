@@ -1,4 +1,9 @@
 {
+  "scripts": {
+    "eval:validate-manifest": "node eval/scripts/validate-manifest.mjs",
+    "eval:run-manifest": "node eval/scripts/run-manifest.mjs",
+    "eval:test-helpers": "node --test eval/scripts/scoreHelpers.test.mjs"
+  },
   "dependencies": {
     "@supabase/ssr": "^0.10.2",
     "@supabase/supabase-js": "^2.103.0",

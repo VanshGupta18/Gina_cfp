@@ -52,7 +52,7 @@ export function DatasetWorkspaceToolbar({
             <ArrowLeft className="h-4 w-4" />
           </Link>
         ) : null}
-        <h2 className="text-lg font-bold font-serif text-white tracking-wide truncate">{datasetName}</h2>
+        <h2 className="text-lg font-bold tracking-tight text-white truncate">{datasetName}</h2>
       </div>
       <div className="flex items-center gap-2 shrink-0">
         {onViewDataset && (

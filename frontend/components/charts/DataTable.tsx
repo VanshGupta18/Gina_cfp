@@ -40,7 +40,14 @@ export function DataTable({ data, isInline }: { data: StandardChartData; isInlin
             {displayRows.map((row, i) => (
               <tr key={i} className="border-b border-surface-border/50 hover:bg-surface/50 transition-colors last:border-b-0">
                 {row.map((cell, j) => (
-                  <td key={j} className="px-6 py-3 whitespace-nowrap">
+                  <td
+                    key={j}
+                    className={
+                      j === 0
+                        ? 'px-6 py-3 align-top text-slate-200 whitespace-normal break-words max-w-[min(28rem,85vw)]'
+                        : 'px-6 py-3 whitespace-nowrap'
+                    }
+                  >
                     {formatCell(cell)}
                   </td>
                 ))}

@@ -1,12 +1,12 @@
 'use client';
 
-import React, { Suspense, useCallback, useEffect, useState } from 'react';
+import React, { Suspense, useCallback, useEffect, useMemo, useState } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { DatasetWorkspaceToolbar } from '@/components/app/DatasetWorkspaceToolbar';
-import { renderChart } from '@/components/charts/ChartRenderer';
+import { hasRenderableChart, renderChart } from '@/components/charts/ChartRenderer';
 import { getDatasetOverview } from '@/lib/api/datasets';
-import type { ChartData, ChartType, DatasetOverviewStored } from '@/types';
+import type { BigNumberChartData, ChartData, ChartType, DatasetOverviewStored } from '@/types';
 import { useDatasets } from '@/lib/hooks/useDatasets';
 import { formatChartAxisLabel } from '@/lib/charts/formatChartNumber';
 
@@ -18,6 +18,16 @@ function isOverviewStored(v: unknown): v is DatasetOverviewStored {
 
 function isSafeConversationIdSegment(id: string): boolean {
   return id.length > 0 && id.length <= 128 && !id.includes('/') && !id.includes('..') && /^[\w-]+$/.test(id);
+}
+
+/** Skip overview slots where the chart would render nothing (same rules as chat + finite big_number). */
+function overviewChartHasRenderableData(chartType: ChartType, chartData: ChartData): boolean {
+  if (chartType === 'big_number') {
+    const d = chartData as BigNumberChartData;
+    const n = typeof d.value === 'number' ? d.value : parseFloat(String(d.value ?? ''));
+    return Number.isFinite(n);
+  }
+  return hasRenderableChart(chartType, chartData);
 }
 
 function DatasetOverviewContent() {
@@ -79,6 +89,13 @@ function DatasetOverviewContent() {
   }, [status, poll]);
 
   const title = activeDataset?.name ?? 'Dataset';
+
+  const chartsToShow = useMemo(() => {
+    if (!overview) return [];
+    return overview.charts.filter((ch) =>
+      overviewChartHasRenderableData(ch.chartType as ChartType, ch.chartData as ChartData),
+    );
+  }, [overview]);
 
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-[#0F121A]">
@@ -143,25 +160,27 @@ function DatasetOverviewContent() {
               </section>
             )}
 
-            <section>
-              <h2 className="mb-4 font-medium text-slate-200">Charts</h2>
-              <div className="grid gap-6 md:grid-cols-1 lg:grid-cols-2">
-                {overview.charts.map((ch, idx) => (
-                  <div
-                    key={idx}
-                    className="flex flex-col rounded-2xl border border-white/8 bg-[rgba(8,10,15,0.45)] p-4"
-                  >
-                    <h3 className="mb-1 text-sm font-medium text-slate-200">{ch.title}</h3>
-                    {ch.insight && (
-                      <p className="mb-3 text-xs text-slate-500">{formatChartAxisLabel(ch.insight)}</p>
-                    )}
-                    <div className="min-h-[280px] flex-1">
-                      {renderChart(ch.chartType as ChartType, ch.chartData as ChartData)}
+            {chartsToShow.length > 0 && (
+              <section>
+                <h2 className="mb-4 font-medium text-slate-200">Charts</h2>
+                <div className="grid gap-6 md:grid-cols-1 lg:grid-cols-2">
+                  {chartsToShow.map((ch, idx) => (
+                    <div
+                      key={idx}
+                      className="flex flex-col rounded-2xl border border-white/8 bg-[rgba(8,10,15,0.45)] p-4"
+                    >
+                      <h3 className="mb-1 text-sm font-medium text-slate-200">{ch.title}</h3>
+                      {ch.insight && (
+                        <p className="mb-3 text-xs text-slate-500">{formatChartAxisLabel(ch.insight)}</p>
+                      )}
+                      <div className="min-h-[280px] flex-1">
+                        {renderChart(ch.chartType as ChartType, ch.chartData as ChartData)}
+                      </div>
                     </div>
-                  </div>
-                ))}
-              </div>
-            </section>
+                  ))}
+                </div>
+              </section>
+            )}
           </div>
         )}
       </div>

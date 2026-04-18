@@ -32,9 +32,11 @@ export type GenerateSqlResult = {
 const HF_SQL_TIMEOUT_MS = 8000;
 const GROQ_SQL_TIMEOUT_MS = 5000;
 
-/** Shared SQL-generation rules (user prompt + Groq system) — rates vs counts, time grain. */
+/** Shared SQL-generation rules (user prompt + Groq system) — rates vs counts, time grain, flags, compound filters. */
 const SQL_ANSWERING_RULES = `Rates, ratios, and "per X": If the question asks for a rate, per order, per customer, complaints per order, churn rate, NPS, or any share/percentage, compute SUM(numerator_column)::numeric / NULLIF(SUM(denominator_column), 0) at the requested grain (with GROUP BY as needed), using the exact quoted identifiers from the schema for every column. Do not use SUM of a single count column alone when a rate or "per" was asked—include the correct denominator (e.g. orders, active_customers) from the schema.
-Time grain: If the question refers to weeks, months, quarters, years, trends, "when", or compares periods, filter and/or GROUP BY the appropriate date columns using their quoted names from the schema—do not return one global total when the question asks for a time breakdown or period-specific pattern.`;
+Time grain: If the question refers to weeks, months, quarters, years, trends, "when", or compares periods, filter and/or GROUP BY the appropriate date columns using their quoted names from the schema—do not return one global total when the question asks for a time breakdown or period-specific pattern.
+Multi-dimensional filters: If the question names more than one constraint (e.g. product category AND country/region, or segment AND time window), combine every constraint in the WHERE clause with AND using the quoted column names from the schema. Do not drop a filter the user asked for.
+Flag / boolean-like TEXT: Columns marked semantic=flag are stored as PostgreSQL TEXT (often 'true'/'false' or yes/no style). Compare with text-safe predicates, e.g. (LOWER(TRIM("col"::text)) IN ('true','1','yes','y')) for true-like values and ('false','0','no','n') for false-like values, using the exact quoted identifier from the schema. Do not compare flag columns to free-form English phrases.`;
 
 const GROQ_SQL_SYSTEM_PROMPT = `You output a single PostgreSQL SELECT statement only. No markdown, no explanation.
 
@@ -42,7 +44,7 @@ Dataset columns are often quoted (e.g. "Employee Code") because names come from 
 
 ${SQL_ANSWERING_RULES}`;
 
-function buildSqlCoderPrompt(params: {
+export function buildSqlCoderPrompt(params: {
   question: string;
   tableName: string;
   columns: ColumnProfile[];
@@ -50,7 +52,7 @@ function buildSqlCoderPrompt(params: {
 }): string {
   const colLines = params.columns.map(
     (c) =>
-      `${quotePgIdent(c.columnName)} (${c.postgresType}) -- ${c.businessLabel}: ${c.description}`,
+      `${quotePgIdent(c.columnName)} (${c.postgresType}; semantic=${c.semanticType}) -- ${c.businessLabel}: ${c.description}`,
   );
   return `### Task
 Generate a PostgreSQL SELECT query to answer the question.

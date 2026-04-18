@@ -24,6 +24,7 @@ const migrationFiles = [
   '001_initial_schema.sql',
   '002_dataset_content_hash.sql',
   '003_semantic_states_dataset_overview.sql',
+  '004_semantic_states_starter_questions_cache.sql',
 ];
 
 for (const name of migrationFiles) {

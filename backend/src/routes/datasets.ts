@@ -38,6 +38,14 @@ const patchDatasetNameSchema = z.object({
     .transform((s) => s.trim()),
 });
 
+/** Cached GET /starter-questions payload; must match semantic `updated_at` to be valid */
+const cachedStartersSchema = z.array(
+  z.object({
+    title: z.string(),
+    question: z.string(),
+  }),
+);
+
 const semanticPatchBodySchema = z.object({
   corrections: z
     .array(
@@ -241,8 +249,12 @@ export default async function datasetsRoutes(fastify: FastifyInstance) {
         name: string;
         schema_json: unknown;
         understanding_card: string | null;
+        updated_at: string;
+        starter_questions_json: unknown;
+        starter_questions_for_updated_at: string | null;
       }>(
-        `SELECT d.name, ss.schema_json, ss.understanding_card
+        `SELECT d.name, ss.schema_json, ss.understanding_card, ss.updated_at,
+                ss.starter_questions_json, ss.starter_questions_for_updated_at
          FROM datasets d
          INNER JOIN semantic_states ss ON ss.dataset_id = d.id
          WHERE d.id = $1::uuid AND (d.user_id = $2::uuid OR d.is_demo = true)`,
@@ -257,10 +269,31 @@ export default async function datasetsRoutes(fastify: FastifyInstance) {
       const schema = row.schema_json as StoredSchemaJson | null;
       const columns = schema?.columns ?? [];
 
+      const cacheValid =
+        row.starter_questions_json != null &&
+        row.starter_questions_for_updated_at != null &&
+        new Date(row.starter_questions_for_updated_at).getTime() ===
+          new Date(row.updated_at).getTime();
+
+      if (cacheValid) {
+        const parsed = cachedStartersSchema.safeParse(row.starter_questions_json);
+        if (parsed.success) {
+          return { starters: parsed.data };
+        }
+      }
+
       const starters = await generateStarterQuestions(
         columns,
         row.understanding_card ?? schema?.understandingCard ?? '',
         row.name,
+      );
+
+      await fastify.db.query(
+        `UPDATE semantic_states
+         SET starter_questions_json = $1::jsonb,
+             starter_questions_for_updated_at = updated_at
+         WHERE dataset_id = $2::uuid`,
+        [JSON.stringify(starters), datasetId],
       );
 
       return { starters };
@@ -644,7 +677,9 @@ export default async function datasetsRoutes(fastify: FastifyInstance) {
          SET schema_json = $2::jsonb,
              understanding_card = $3,
              is_user_corrected = true,
-             updated_at = NOW()
+             updated_at = NOW(),
+             starter_questions_json = NULL,
+             starter_questions_for_updated_at = NULL
          WHERE dataset_id = $1::uuid
          RETURNING id, updated_at`,
         [

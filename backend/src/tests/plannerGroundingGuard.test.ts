@@ -3,9 +3,10 @@ import { test } from 'node:test';
 import {
   applyPlannerGroundingGuard,
   buildGroundingFallbackReply,
-  DEFAULT_NOT_GROUNDED_REPLY,
+  resolvePlannerColumnHint,
 } from '../pipeline/plannerGroundingGuard.js';
 import type { PlannerOutput } from '../pipeline/planner.js';
+import type { ColumnProfile } from '../semantic/profiler.js';
 
 const basePlan = (overrides: Partial<PlannerOutput>): PlannerOutput => ({
   intent: 'simple_query',
@@ -19,11 +20,25 @@ const basePlan = (overrides: Partial<PlannerOutput>): PlannerOutput => ({
 
 const allowed = new Set(['amount', 'date', 'category']);
 
+const minimalProfile = (columnName: string, businessLabel: string): ColumnProfile => ({
+  columnName,
+  postgresType: 'NUMERIC',
+  businessLabel,
+  semanticType: 'amount',
+  currency: null,
+  description: '',
+  sampleValues: [],
+  nullPct: 0,
+  uniqueCount: 1,
+  valueRange: null,
+});
+
 test('valid SQL intent and columns — unchanged', () => {
   const plan = basePlan({ relevantColumns: ['amount', 'date'], relevantTables: ['dataset_t1'] });
   const { plan: out, coerced } = applyPlannerGroundingGuard(plan, {
     tableName: 'dataset_t1',
     allowedColumnNames: allowed,
+    columnProfiles: [],
   });
   assert.strictEqual(coerced, false);
   assert.strictEqual(out.intent, 'simple_query');
@@ -34,24 +49,29 @@ test('unknown column — coerces to conversational', () => {
   const { plan: out, coerced } = applyPlannerGroundingGuard(plan, {
     tableName: 'dataset_t1',
     allowedColumnNames: allowed,
+    columnProfiles: [
+      minimalProfile('amount', 'Amount'),
+      minimalProfile('date', 'Date'),
+      minimalProfile('category', 'Category'),
+    ],
   });
   assert.strictEqual(coerced, true);
   assert.strictEqual(out.intent, 'conversational');
   assert.deepStrictEqual(out.relevantColumns, []);
-  assert.ok(out.conversationalReply?.includes(DEFAULT_NOT_GROUNDED_REPLY.slice(0, 20)));
+  assert.ok(out.conversationalReply?.includes("wasn't able to match"));
 });
 
-test('empty relevantColumns with SQL intent — coerces', () => {
+test('empty relevantColumns with SQL intent — pass through (SQL gen has full schema)', () => {
   const plan = basePlan({ relevantColumns: [] });
   const { plan: out, coerced } = applyPlannerGroundingGuard(plan, {
     tableName: 'dataset_t1',
     allowedColumnNames: allowed,
   });
-  assert.strictEqual(coerced, true);
-  assert.strictEqual(out.intent, 'conversational');
+  assert.strictEqual(coerced, false);
+  assert.strictEqual(out.intent, 'simple_query');
 });
 
-test('wrong table in relevantTables — coerces', () => {
+test('wrong table in relevantTables — repair to physical table, do not coerce', () => {
   const plan = basePlan({
     relevantColumns: ['amount'],
     relevantTables: ['other_table'],
@@ -60,8 +80,45 @@ test('wrong table in relevantTables — coerces', () => {
     tableName: 'dataset_t1',
     allowedColumnNames: allowed,
   });
-  assert.strictEqual(coerced, true);
-  assert.strictEqual(out.intent, 'conversational');
+  assert.strictEqual(coerced, false);
+  assert.strictEqual(out.intent, 'simple_query');
+  assert.deepStrictEqual(out.relevantTables, ['dataset_t1']);
+});
+
+test('case-insensitive column hint — resolves to canonical columnName', () => {
+  const plan = basePlan({ relevantColumns: ['AMOUNT', 'Date'] });
+  const { plan: out, coerced } = applyPlannerGroundingGuard(plan, {
+    tableName: 'dataset_t1',
+    allowedColumnNames: allowed,
+    columnProfiles: [],
+  });
+  assert.strictEqual(coerced, false);
+  assert.deepStrictEqual(out.relevantColumns, ['amount', 'date']);
+});
+
+test('businessLabel hint maps to columnName', () => {
+  const plan = basePlan({
+    relevantColumns: ['Total Amount'],
+  });
+  const { plan: out, coerced } = applyPlannerGroundingGuard(plan, {
+    tableName: 'dataset_t1',
+    allowedColumnNames: new Set(['amount', 'date']),
+    columnProfiles: [minimalProfile('amount', 'Total Amount'), minimalProfile('date', 'Day')],
+  });
+  assert.strictEqual(coerced, false);
+  assert.deepStrictEqual(out.relevantColumns, ['amount']);
+});
+
+test('resolvePlannerColumnHint — substring on businessLabel', () => {
+  const profiles: ColumnProfile[] = [
+    minimalProfile('Math score', 'Math score'),
+    minimalProfile('Student ID', 'Student ID'),
+  ];
+  const allowedNames = new Set(profiles.map((p) => p.columnName));
+  assert.strictEqual(
+    resolvePlannerColumnHint('math', allowedNames, profiles),
+    'Math score',
+  );
 });
 
 test('conversational intent — pass through', () => {
@@ -79,10 +136,10 @@ test('conversational intent — pass through', () => {
   assert.strictEqual(out.intent, 'conversational');
 });
 
-test('buildGroundingFallbackReply appends understanding card when short', () => {
+test('buildGroundingFallbackReply leads with understanding card when short', () => {
   const s = buildGroundingFallbackReply('Sales by region.');
-  assert.ok(s.includes('Sales by region'));
-  assert.ok(s.includes(DEFAULT_NOT_GROUNDED_REPLY.slice(0, 30)));
+  assert.ok(s.startsWith('Sales by region.'));
+  assert.ok(s.includes('lock that question'));
 });
 
 test('planner conversationalReply preserved when coerced if set', () => {
@@ -93,6 +150,7 @@ test('planner conversationalReply preserved when coerced if set', () => {
   const { plan: out, coerced } = applyPlannerGroundingGuard(plan, {
     tableName: 'dataset_t1',
     allowedColumnNames: allowed,
+    columnProfiles: [],
   });
   assert.strictEqual(coerced, true);
   assert.strictEqual(out.conversationalReply, 'Custom off-topic reply.');

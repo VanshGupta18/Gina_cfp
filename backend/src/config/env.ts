@@ -54,6 +54,11 @@ const envSchema = z.object({
   /** Comma-separated extra CORS origins (e.g. https://app.vercel.app). Localhost defaults are always allowed in server.ts. */
   CORS_ORIGINS: z.string().optional().default(''),
 
+  /**
+   * When true, skip `response_cache` lookup so identical questions re-run the full pipeline.
+   * Useful for eval reruns and debugging. Does not disable narration_cache after SQL runs.
+   */
+  DISABLE_RESPONSE_CACHE: boolFromEnv,
   /** When true, skip Groq PII agent and use heuristic fallback only. */
   PII_AGENT_DISABLED: boolFromEnv,
   /** Max time for one PII agent Groq call (ms). */

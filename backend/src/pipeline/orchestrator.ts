@@ -34,6 +34,7 @@ import {
   SIMULATED_STEP_DELAY_MS,
 } from '../snapshots/snapshotStore.js';
 import { logPipelineRun, type PipelineRunInput } from '../telemetry/pipelineLogger.js';
+import { env } from '../config/env.js';
 
 export type { QueryResultPayload };
 
@@ -123,22 +124,40 @@ function formatFigure(columnName: string, value: number): string {
   return value.toFixed(2).replace(/\.?0+$/, '');
 }
 
-function extractKeyFigure(rows: ResultRow[], chartType: ChartType): string {
+/** Human label for a result column key using schema businessLabel when available. */
+function labelForResultColumn(key: string, schemaColumns: ColumnProfile[]): string {
+  const c = schemaColumns.find((x) => x.columnName === key);
+  const label = c?.businessLabel?.trim();
+  return label && label.length > 0 ? label : key;
+}
+
+function numericKeysInRow(row: ResultRow): string[] {
+  return Object.keys(row).filter((k) => {
+    const v = row[k];
+    return typeof v === 'number' || (typeof v === 'string' && v.trim() !== '' && !isNaN(parseFloat(v)));
+  });
+}
+
+/**
+ * One-line headline only when a single aggregate row makes sense.
+ * For 2+ rows (trends, breakdowns, tables), summing one numeric column is often wrong
+ * (e.g. "Month (total): 78" for a monthly trend) — omit the key figure.
+ */
+function extractKeyFigure(rows: ResultRow[], schemaColumns: ColumnProfile[]): string {
   if (rows.length === 0) return '0';
+  if (rows.length > 1) return '—';
 
-  if (chartType === 'big_number') {
-    const row = rows[0]!;
-    const numKey = firstNumericKey([row]) ?? Object.keys(row)[0]!;
-    const val = parseFloat(String(row[numKey]));
-    return isNaN(val) ? String(row[numKey]) : formatFigure(numKey, val);
-  }
-
-  // Multi-row: sum the primary numeric column as the headline figure
-  const numKey = firstNumericKey(rows);
-  if (!numKey) return String(rows.length);
-  const values = rows.map((r) => parseFloat(String(r[numKey] ?? 'NaN'))).filter((v) => !isNaN(v));
-  const total = values.reduce((s, v) => s + v, 0);
-  return formatFigure(numKey, total);
+  const row = rows[0]!;
+  const keys = numericKeysInRow(row);
+  if (keys.length === 0) return '—';
+  const parts = keys.map((k) => {
+    const raw = row[k];
+    const val = parseFloat(String(raw));
+    const fig = isNaN(val) ? String(raw) : formatFigure(k, val);
+    const lab = labelForResultColumn(k, schemaColumns);
+    return `${lab}: ${fig}`;
+  });
+  return parts.join(' · ');
 }
 
 function buildChartData(
@@ -373,7 +392,8 @@ export async function runQueryOrchestration(input: QueryOrchestrationInput): Pro
     }
   }
 
-  const cached = await getResponseCache(fastify.db, datasetId, question);
+  const cached =
+    env.DISABLE_RESPONSE_CACHE ? null : await getResponseCache(fastify.db, datasetId, question);
   if (cached) {
     await incrementResponseCacheHits(fastify.db, cached.cacheKey);
     await sendStep(reply, {
@@ -521,8 +541,10 @@ export async function runQueryOrchestration(input: QueryOrchestrationInput): Pro
       tableName,
       allowedColumnNames: allowedNames,
       understandingCard,
+      columnProfiles: columns,
     });
     plan = grounding.plan;
+
     if (grounding.coerced) {
       fastify.log.info(
         { question: question.slice(0, 160) },
@@ -729,7 +751,7 @@ export async function runQueryOrchestration(input: QueryOrchestrationInput): Pro
 
     // ── Person A: chart type (§9) ──
     const chartType = selectChartType(rows, plan.intent, question);
-    const keyFigure = extractKeyFigure(rows, chartType);
+    const keyFigure = extractKeyFigure(rows, columns);
 
     const shapeFp = resultShapeFingerprint(rows, gen.sql);
     const narrCacheKey = narrationCacheKey(plan.intent, shapeFp);

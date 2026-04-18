@@ -167,6 +167,17 @@ function OutputCardImpl({ payload, onCorrectionClick }: OutputCardProps) {
             <CitationChips citations={payload.citationChips} />
           </div>
         )}
+
+        {payload.totalTimeMs != null &&
+          Number.isFinite(payload.totalTimeMs) &&
+          payload.totalTimeMs >= 0 && (
+            <p
+              className="mt-4 pt-3 text-xs text-slate-500 tabular-nums"
+              style={{ borderTop: '1px solid rgba(255,255,255,0.06)' }}
+            >
+              Query time: {Math.round(payload.totalTimeMs).toLocaleString('en-GB')} ms
+            </p>
+          )}
       </div>
 
       {(payload.sql || payload.secondarySql) && (

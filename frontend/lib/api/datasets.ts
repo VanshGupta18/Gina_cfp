@@ -39,9 +39,38 @@ export async function getSemanticState(datasetId: string): Promise<SemanticState
   return response;
 }
 
-/** Contextual empty-chat starter prompts for the dataset (LLM + server fallback). */
+const starterInFlight = new Map<string, Promise<{ starters: StarterQuestionItem[] }>>();
+const starterResolved = new Map<string, { starters: StarterQuestionItem[] }>();
+
+/** Drop client-side starter cache when semantic state changes so the next fetch can regen on the server. */
+export function invalidateStarterQuestionsCache(datasetId: string): void {
+  starterResolved.delete(datasetId);
+  starterInFlight.delete(datasetId);
+}
+
+/** Contextual empty-chat starter prompts for the dataset (LLM + server fallback). Dedupes in-flight and session cache per dataset. */
 export async function getStarterQuestions(datasetId: string): Promise<{ starters: StarterQuestionItem[] }> {
-  return apiFetch<{ starters: StarterQuestionItem[] }>(`/api/datasets/${datasetId}/starter-questions`);
+  const memo = starterResolved.get(datasetId);
+  if (memo) return Promise.resolve(memo);
+
+  const pending = starterInFlight.get(datasetId);
+  if (pending) return pending;
+
+  const p = apiFetch<{ starters: StarterQuestionItem[] }>(
+    `/api/datasets/${datasetId}/starter-questions`,
+  )
+    .then((r) => {
+      starterResolved.set(datasetId, r);
+      starterInFlight.delete(datasetId);
+      return r;
+    })
+    .catch((e) => {
+      starterInFlight.delete(datasetId);
+      throw e;
+    });
+
+  starterInFlight.set(datasetId, p);
+  return p;
 }
 
 export async function getDatasetPreview(
@@ -65,6 +94,7 @@ export async function patchSemanticState(
     body: JSON.stringify({ corrections }),
   });
 
+  invalidateStarterQuestionsCache(datasetId);
   return response;
 }
 

@@ -391,8 +391,13 @@ Any unrecoverable error
 | Gemini 250 req/day | Used only on demo day. Groq Maverick handles all dev narration. |
 | Gemini 10 RPM | Round-robin across multiple Google AI Studio keys; narration cache avoids repeat calls |
 | Repeat questions | Semantic response cache (24hr TTL) — identical question on same dataset skips pipeline entirely |
+| Empty-chat starter prompts | `semantic_states.starter_questions_json` keyed to `updated_at`; cleared on semantic PATCH; frontend dedupes concurrent GETs per dataset |
 | Repeat result shapes | Narration cache — same result shape + intent returns cached narrative |
 | Primary + secondary narration | Batched into a single narrator call — saves 1 Gemini/Groq call per complex query |
+
+### Optional further LLM reductions (measure first)
+
+If Groq or embedding volume is still high, consider: stronger heuristic-first paths for follow-up suggestions; avoiding a second planner/SQL call when template SQL already validated; short-TTL cache of planner output keyed by question + schema hash (higher complexity). The hot path for duplicate *empty-chat* Groq calls is addressed by starter persistence above.
 
 ---
 
