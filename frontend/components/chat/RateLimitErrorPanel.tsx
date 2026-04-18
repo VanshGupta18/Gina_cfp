@@ -61,7 +61,7 @@ export function RateLimitErrorPanel({
       <div className="flex-1">
         <h3 className="mb-1 font-semibold text-amber-100">Rate Limit Reached</h3>
         <p className="mb-3 text-sm text-amber-200/90">
-          You've used your daily token limit for the API. To continue asking questions, please wait
+          You&apos;ve used your daily token limit for the API. To continue asking questions, please wait
           or upgrade your account.
         </p>
 
