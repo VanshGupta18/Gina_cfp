@@ -1,8 +1,9 @@
 'use client';
 
-import React, { useCallback } from 'react';
+import React, { useCallback, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useSidebarViewModel } from '@/lib/hooks/useSidebarViewModel';
+import { useToast } from '@/lib/providers/ToastProvider';
 import { SidebarHeaderActions } from './SidebarHeaderActions';
 import { DatasetTree } from './DatasetTree';
 import { SidebarEmptyState } from './SidebarEmptyState';
@@ -33,6 +34,8 @@ export default function NonTechSidebar({
 }: NonTechSidebarProps) {
   const router = useRouter();
   const vm = useSidebarViewModel();
+  const { showToast } = useToast();
+  const [sidebarMutating, setSidebarMutating] = useState(false);
 
   const handleSelectDataset = useCallback(
     (dataset: Dataset) => {
@@ -70,6 +73,105 @@ export default function NonTechSidebar({
       vm.retryLoadDatasetConversations(datasetId);
     },
     [vm],
+  );
+
+  const handleRenameDataset = useCallback(
+    (dataset: Dataset) => {
+      if (dataset.isDemo) return;
+      const next = window.prompt('Dataset name', dataset.name);
+      if (next === null) return;
+      const trimmed = next.trim();
+      if (!trimmed) {
+        showToast('Name cannot be empty', 'error');
+        return;
+      }
+      void (async () => {
+        setSidebarMutating(true);
+        try {
+          await vm.renameDataset(dataset, trimmed);
+          showToast('Dataset renamed', 'success');
+        } catch {
+          showToast('Failed to rename dataset', 'error');
+        } finally {
+          setSidebarMutating(false);
+        }
+      })();
+    },
+    [vm, showToast],
+  );
+
+  const handleDeleteDataset = useCallback(
+    (dataset: Dataset) => {
+      if (dataset.isDemo) return;
+      if (
+        !window.confirm(
+          `Delete dataset "${dataset.name}"?\n\nAll conversations for this dataset will be permanently removed.`,
+        )
+      ) {
+        return;
+      }
+      void (async () => {
+        setSidebarMutating(true);
+        try {
+          await vm.deleteDataset(dataset);
+          showToast('Dataset deleted', 'success');
+          router.push('/app');
+        } catch {
+          showToast('Failed to delete dataset', 'error');
+        } finally {
+          setSidebarMutating(false);
+        }
+      })();
+    },
+    [vm, showToast, router],
+  );
+
+  const handleRenameChat = useCallback(
+    (conversation: Conversation) => {
+      const next = window.prompt('Conversation title', conversation.title || 'Untitled');
+      if (next === null) return;
+      const trimmed = next.trim();
+      if (!trimmed) {
+        showToast('Title cannot be empty', 'error');
+        return;
+      }
+      void (async () => {
+        setSidebarMutating(true);
+        try {
+          await vm.renameChat(conversation, trimmed);
+          showToast('Conversation renamed', 'success');
+        } catch {
+          showToast('Failed to rename conversation', 'error');
+        } finally {
+          setSidebarMutating(false);
+        }
+      })();
+    },
+    [vm, showToast],
+  );
+
+  const handleDeleteChat = useCallback(
+    (conversation: Conversation) => {
+      if (
+        !window.confirm(
+          `Delete this conversation?\n\n"${conversation.title || 'Untitled'}" will be permanently removed.`,
+        )
+      ) {
+        return;
+      }
+      void (async () => {
+        setSidebarMutating(true);
+        try {
+          await vm.deleteChat(conversation);
+          showToast('Conversation deleted', 'success');
+        } catch {
+          showToast('Failed to delete conversation', 'error');
+        } finally {
+          setSidebarMutating(false);
+        }
+      })();
+    },
+    [vm, showToast],
   );
 
   return (
@@ -123,6 +225,12 @@ export default function NonTechSidebar({
               onSelectChat={handleSelectChat}
               activeConversation={vm.activeConversation}
               isCreatingChat={vm.isCreatingChat}
+              onRenameDataset={handleRenameDataset}
+              onDeleteDataset={handleDeleteDataset}
+              onRenameChat={handleRenameChat}
+              onDeleteChat={handleDeleteChat}
+              datasetActionsBusy={sidebarMutating}
+              chatActionsBusy={sidebarMutating}
             />
           </div>
         )}

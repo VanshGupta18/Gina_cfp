@@ -1,18 +1,19 @@
 'use client';
 
-import React, { useMemo } from 'react';
+import React, { useMemo, useState, useEffect, useRef } from 'react';
 import type { Conversation } from '@/types';
+import { MoreVertical, Pencil, Trash2 } from 'lucide-react';
 
 interface ChatNodeProps {
   conversation: Conversation;
   isActive: boolean;
   onClick: () => void;
   showRelativeTime?: boolean;
+  onRename?: (conversation: Conversation) => void;
+  onDelete?: (conversation: Conversation) => void;
+  busy?: boolean;
 }
 
-/**
- * Format relative time (e.g., "2d ago", "1h ago", "just now")
- */
 function formatRelativeTime(dateString: string): string {
   const date = new Date(dateString);
   const now = new Date();
@@ -27,34 +28,120 @@ function formatRelativeTime(dateString: string): string {
   if (daysAgo < 7) return `${daysAgo}d ago`;
   const weeksAgo = Math.floor(daysAgo / 7);
   if (weeksAgo < 4) return `${weeksAgo}w ago`;
-  
-  // Fallback to date format
+
   return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }
 
-export function ChatNode({ conversation, isActive, onClick, showRelativeTime = true }: ChatNodeProps) {
+export function ChatNode({
+  conversation,
+  isActive,
+  onClick,
+  showRelativeTime = true,
+  onRename,
+  onDelete,
+  busy,
+}: ChatNodeProps) {
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+
   const relativeTime = useMemo(() => formatRelativeTime(conversation.updatedAt), [conversation.updatedAt]);
-  
+
   const title = conversation.title || 'Untitled Chat';
 
+  const hasActions = Boolean(onRename || onDelete);
+
+  useEffect(() => {
+    if (!menuOpen) return;
+    const handle = (e: MouseEvent) => {
+      const t = e.target as Node;
+      if (menuRef.current && !menuRef.current.contains(t)) {
+        setMenuOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handle);
+    return () => document.removeEventListener('mousedown', handle);
+  }, [menuOpen]);
+
   return (
-    <button
-      type="button"
-      onClick={onClick}
+    <div
       className={`
-        flex w-full items-center justify-between gap-2 rounded-lg px-3 py-2 text-sm
-        transition-colors
-        ${
-          isActive
-            ? 'bg-brand-indigo/15 text-brand-indigo'
-            : 'text-slate-400 hover:bg-white/5 hover:text-slate-300'
-        }
+        group flex w-full items-center gap-0.5 rounded-lg pr-1
+        ${isActive ? 'bg-brand-indigo/15' : 'hover:bg-white/5'}
       `}
     >
-      <span className="flex-1 truncate text-left">{title}</span>
-      {showRelativeTime && (
-        <span className="shrink-0 text-[11px] text-slate-500">{relativeTime}</span>
+      <button
+        type="button"
+        onClick={onClick}
+        className={`
+          flex min-w-0 flex-1 items-center justify-between gap-2 rounded-lg px-3 py-2 text-sm
+          transition-colors
+          ${
+            isActive
+              ? 'text-brand-indigo'
+              : 'text-slate-400 hover:text-slate-300'
+          }
+        `}
+      >
+        <span className="flex-1 truncate text-left">{title}</span>
+        {showRelativeTime && (
+          <span className="shrink-0 text-[11px] text-slate-500">{relativeTime}</span>
+        )}
+      </button>
+
+      {hasActions && (
+        <div className="relative shrink-0" ref={menuRef}>
+          <button
+            type="button"
+            disabled={busy}
+            onClick={(e) => {
+              e.stopPropagation();
+              setMenuOpen((o) => !o);
+            }}
+            className="flex h-8 w-8 items-center justify-center rounded-md text-slate-500 opacity-70 transition-opacity hover:bg-white/10 hover:text-slate-300 group-hover:opacity-100 disabled:opacity-30"
+            aria-label="Chat options"
+            aria-expanded={menuOpen}
+          >
+            <MoreVertical className="h-4 w-4" />
+          </button>
+          {menuOpen && (
+            <div
+              className="absolute right-0 top-full z-[80] mt-1 min-w-[140px] overflow-hidden rounded-lg border border-white/10 py-1 shadow-xl"
+              style={{
+                background: 'rgba(18, 22, 32, 0.98)',
+                backdropFilter: 'blur(12px)',
+              }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              {onRename && (
+                <button
+                  type="button"
+                  className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-slate-300 hover:bg-white/10 hover:text-white"
+                  onClick={() => {
+                    setMenuOpen(false);
+                    onRename(conversation);
+                  }}
+                >
+                  <Pencil className="h-3.5 w-3.5 shrink-0 text-slate-500" />
+                  Rename
+                </button>
+              )}
+              {onDelete && (
+                <button
+                  type="button"
+                  className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-red-400 hover:bg-red-500/10 hover:text-red-300"
+                  onClick={() => {
+                    setMenuOpen(false);
+                    onDelete(conversation);
+                  }}
+                >
+                  <Trash2 className="h-3.5 w-3.5 shrink-0" />
+                  Delete
+                </button>
+              )}
+            </div>
+          )}
+        </div>
       )}
-    </button>
+    </div>
   );
 }

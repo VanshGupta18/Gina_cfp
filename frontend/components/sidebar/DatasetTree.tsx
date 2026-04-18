@@ -17,6 +17,12 @@ interface DatasetTreeProps {
   onSelectChat: (conversation: Conversation, datasetId: string) => void;
   activeConversation: Conversation | null;
   isCreatingChat: boolean;
+  onRenameDataset?: (dataset: Dataset) => void;
+  onDeleteDataset?: (dataset: Dataset) => void;
+  onRenameChat?: (conversation: Conversation) => void;
+  onDeleteChat?: (conversation: Conversation) => void;
+  datasetActionsBusy?: boolean;
+  chatActionsBusy?: boolean;
 }
 
 export function DatasetTree({
@@ -32,6 +38,12 @@ export function DatasetTree({
   onSelectChat,
   activeConversation,
   isCreatingChat,
+  onRenameDataset,
+  onDeleteDataset,
+  onRenameChat,
+  onDeleteChat,
+  datasetActionsBusy,
+  chatActionsBusy,
 }: DatasetTreeProps) {
   if (datasets.length === 0) {
     return null;
@@ -54,6 +66,12 @@ export function DatasetTree({
           onSelectChat={(conversation) => onSelectChat(conversation, dataset.id)}
           activeConversation={activeConversation}
           isCreatingChat={isCreatingChat}
+          onRenameDataset={onRenameDataset}
+          onDeleteDataset={onDeleteDataset}
+          onRenameChat={onRenameChat}
+          onDeleteChat={onDeleteChat}
+          datasetActionsBusy={datasetActionsBusy}
+          chatActionsBusy={chatActionsBusy}
         />
       ))}
     </div>

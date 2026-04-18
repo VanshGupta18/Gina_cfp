@@ -1,12 +1,13 @@
 'use client';
 
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import type { Dataset, Conversation } from '@/types';
 import { useDatasets } from './useDatasets';
 import { useConversation } from './useConversation';
 import { useUploadModal } from './useUploadModal';
-import { useDatasetConversations, invalidateDatasetConversationCache } from './useDatasetConversations';
+import { invalidateDatasetConversationCache, invalidateAllConversationCaches } from './useDatasetConversations';
 import { listConversations } from '@/lib/api/conversations';
+import { updateDataset, deleteDataset as deleteDatasetRequest } from '@/lib/api/datasets';
 
 /**
  * SidebarViewModel
@@ -37,6 +38,10 @@ export interface SidebarViewModel {
   // Actions
   createNewChat: (title?: string) => Promise<Conversation | null>;
   openUploadModal: () => void;
+  renameChat: (conversation: Conversation, title: string) => Promise<void>;
+  deleteChat: (conversation: Conversation) => Promise<void>;
+  renameDataset: (dataset: Dataset, name: string) => Promise<void>;
+  deleteDataset: (dataset: Dataset) => Promise<void>;
 
   // Local State (Expand/Collapse)
   expandedDatasetIds: Set<string>;
@@ -50,7 +55,14 @@ const EXPANDED_DATASETS_STORAGE_KEY = 'gina-expanded-datasets';
 
 export function useSidebarViewModel(): SidebarViewModel {
   const { datasets, activeDataset, setActiveDataset, isLoading: datasetsLoading, error: datasetsError, refreshDatasets } = useDatasets();
-  const { activeConversation, setActiveConversation, createNewConversation, isLoading: conversationCreating } = useConversation();
+  const {
+    activeConversation,
+    setActiveConversation,
+    createNewConversation,
+    isLoading: conversationCreating,
+    renameConversation,
+    removeConversation,
+  } = useConversation();
   const { openUploadModal: openUploadModalContext } = useUploadModal();
 
   // Per-dataset conversation caching
@@ -205,6 +217,85 @@ export function useSidebarViewModel(): SidebarViewModel {
     openUploadModalContext();
   }, [openUploadModalContext]);
 
+  const renameChat = useCallback(
+    async (conversation: Conversation, title: string) => {
+      const trimmed = title.trim();
+      if (!trimmed) return;
+      await renameConversation(conversation.id, trimmed);
+      invalidateDatasetConversationCache(conversation.datasetId);
+      setConvsByDataset((prev) => {
+        const next = new Map(prev);
+        const list = next.get(conversation.datasetId);
+        if (!list) return prev;
+        next.set(
+          conversation.datasetId,
+          list.map((c) =>
+            c.id === conversation.id
+              ? { ...c, title: trimmed, updatedAt: new Date().toISOString() }
+              : c,
+          ),
+        );
+        return next;
+      });
+    },
+    [renameConversation],
+  );
+
+  const deleteChat = useCallback(
+    async (conversation: Conversation) => {
+      await removeConversation(conversation.id);
+      invalidateDatasetConversationCache(conversation.datasetId);
+      setConvsByDataset((prev) => {
+        const next = new Map(prev);
+        const list = next.get(conversation.datasetId);
+        if (list) {
+          next.set(
+            conversation.datasetId,
+            list.filter((c) => c.id !== conversation.id),
+          );
+        }
+        return next;
+      });
+    },
+    [removeConversation],
+  );
+
+  const renameDataset = useCallback(
+    async (dataset: Dataset, name: string) => {
+      const trimmed = name.trim();
+      if (!trimmed) return;
+      await updateDataset(dataset.id, { name: trimmed });
+      await refreshDatasets();
+    },
+    [refreshDatasets],
+  );
+
+  const deleteDataset = useCallback(
+    async (dataset: Dataset) => {
+      await deleteDatasetRequest(dataset.id);
+      invalidateAllConversationCaches();
+      setConvsByDataset((prev) => {
+        const next = new Map(prev);
+        next.delete(dataset.id);
+        return next;
+      });
+      setExpandedIds((prev) => {
+        const next = new Set(prev);
+        next.delete(dataset.id);
+        if (typeof window !== 'undefined') {
+          try {
+            sessionStorage.setItem(EXPANDED_DATASETS_STORAGE_KEY, JSON.stringify([...next]));
+          } catch {
+            /* ignore */
+          }
+        }
+        return next;
+      });
+      await refreshDatasets();
+    },
+    [refreshDatasets],
+  );
+
   return {
     // Datasets
     datasets,
@@ -227,6 +318,10 @@ export function useSidebarViewModel(): SidebarViewModel {
     // Actions
     createNewChat,
     openUploadModal: handleOpenUploadModal,
+    renameChat,
+    deleteChat,
+    renameDataset,
+    deleteDataset,
 
     // Expand/collapse
     expandedDatasetIds,

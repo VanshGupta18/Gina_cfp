@@ -12,6 +12,9 @@ interface ChatNodeListProps {
   isCreatingChat: boolean;
   showEmptyPrompt?: boolean;
   onStartNewChat?: () => void;
+  onRenameChat?: (conversation: Conversation) => void;
+  onDeleteChat?: (conversation: Conversation) => void;
+  chatActionsBusy?: boolean;
 }
 
 export function ChatNodeList({
@@ -21,6 +24,9 @@ export function ChatNodeList({
   isCreatingChat,
   showEmptyPrompt = true,
   onStartNewChat,
+  onRenameChat,
+  onDeleteChat,
+  chatActionsBusy,
 }: ChatNodeListProps) {
   if (chats.length === 0 && showEmptyPrompt) {
     return (
@@ -51,6 +57,9 @@ export function ChatNodeList({
           isActive={activeConversation?.id === chat.id}
           onClick={() => onSelectChat(chat)}
           showRelativeTime
+          onRename={onRenameChat}
+          onDelete={onDeleteChat}
+          busy={chatActionsBusy}
         />
       ))}
     </div>
