@@ -16,6 +16,8 @@ export default function ConversationPage() {
   // Resolve conversation after messages list loads (needs conversations populated)
   useEffect(() => {
     if (!conversationId) return;
+    
+    console.log('ConversationPage: Setting active conversation:', conversationId);
     setActiveConversation(conversationId);
   }, [conversationId, setActiveConversation, conversations]);
 
@@ -30,6 +32,7 @@ export default function ConversationPage() {
           const convs = await listConversations(d.id);
           if (cancelled) return;
           if (convs.some((c) => c.id === conversationId)) {
+            console.log('ConversationPage: Found conversation in dataset:', d.id);
             setActiveDataset(d);
             return;
           }

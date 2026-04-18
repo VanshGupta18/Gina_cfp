@@ -3,9 +3,9 @@
 import React, { useState } from 'react';
 import { StandardChartData } from '@/types';
 
-export function DataTable({ data }: { data: StandardChartData }) {
+export function DataTable({ data, isInline }: { data: StandardChartData; isInline?: boolean }) {
   const [showAll, setShowAll] = useState(false);
-  const limit = 10;
+  const limit = isInline ? 5 : 10;
   
   const headers = ['Label', ...data.datasets.map(d => d.label)];
   

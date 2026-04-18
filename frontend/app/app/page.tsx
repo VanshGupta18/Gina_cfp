@@ -10,8 +10,14 @@ export default function AppPage() {
 
   if (datasetsLoading) {
     return (
-      <div className="flex flex-1 flex-col items-center justify-center bg-surface p-8 text-slate-400">
-        <div className="flex flex-col items-center gap-4">
+      <div className="flex flex-1 flex-col items-center justify-center bg-surface p-8 text-slate-400 relative">
+        {/* Background mesh gradient */}
+        <div className="absolute inset-0 pointer-events-none overflow-hidden">
+          <div className="absolute -top-40 -right-40 h-80 w-80 rounded-full bg-gradient-to-br from-brand-indigo/5 to-transparent blur-3xl" />
+          <div className="absolute -bottom-40 -left-40 h-80 w-80 rounded-full bg-gradient-to-tr from-brand-teal/5 to-transparent blur-3xl" />
+        </div>
+        
+        <div className="flex flex-col items-center gap-4 relative z-10">
           <div className="relative h-8 w-8">
             <div className="absolute inset-0 rounded-full border-2 border-brand-teal/20" />
             <div className="absolute inset-0 animate-spin rounded-full border-2 border-brand-teal border-t-transparent" />

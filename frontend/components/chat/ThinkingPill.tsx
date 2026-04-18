@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { PipelineTrace } from './PipelineTrace';
 import { PipelineStep } from '@/types';
-import { Sparkles, ChevronDown } from 'lucide-react';
+import { ChevronDown } from 'lucide-react';
 import { useReasoningToggle } from '@/lib/hooks/useReasoningToggle';
 
 export interface ThinkingPillProps {
@@ -12,7 +12,7 @@ export interface ThinkingPillProps {
 }
 
 export function ThinkingPill({ steps, defaultExpanded = false }: ThinkingPillProps) {
-  const { showReasoning, setReasoning } = useReasoningToggle();
+  const { setReasoning } = useReasoningToggle();
   const [expanded, setExpanded] = useState(defaultExpanded);
 
   useEffect(() => {

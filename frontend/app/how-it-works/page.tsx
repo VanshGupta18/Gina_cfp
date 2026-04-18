@@ -11,11 +11,6 @@ import {
   ArrowRight,
   Sparkles,
   CheckCircle2,
-  FileText,
-  Zap,
-  Lock,
-  MessageSquare,
-  ChevronRight,
   Play,
 } from 'lucide-react';
 

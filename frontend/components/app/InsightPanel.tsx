@@ -1,16 +1,11 @@
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
-import { X, BarChart2, TrendingUp, BarChart, LineChart as LineChartIcon, Table2, Pin, PinOff } from 'lucide-react';
-import type { ChartType, ChartData, StandardChartData, BigNumberChartData } from '@/types';
+import { X, BarChart2, TrendingUp, BarChart, LineChart as LineChartIcon, Table2, ChevronLeft, ChevronRight } from 'lucide-react';
+import type { ChartType } from '@/types';
 import { useUIState } from '@/lib/providers/UIStateProvider';
 
-import { BigNumberCard } from '../charts/BigNumberCard';
-import { BarChart as BarChartComp } from '../charts/BarChart';
-import { LineChart } from '../charts/LineChart';
-import { GroupedBarChart } from '../charts/GroupedBarChart';
-import { StackedBarChart } from '../charts/StackedBarChart';
-import { DataTable } from '../charts/DataTable';
+import { renderChart } from '../charts/ChartRenderer';
 
 function ChartTypeIcon({ type }: { type: ChartType }) {
   const cls = 'w-4 h-4';
@@ -37,28 +32,14 @@ function chartTypeLabel(type: ChartType): string {
   }
 }
 
-function renderChart(type: ChartType, data: ChartData) {
-  switch (type) {
-    case 'big_number': {
-      const d = data as unknown as BigNumberChartData;
-      return <BigNumberCard label={d.label as string} value={d.value} />;
-    }
-    case 'bar': return <BarChartComp data={data as unknown as StandardChartData} />;
-    case 'line': return <LineChart data={data as unknown as StandardChartData} />;
-    case 'grouped_bar': return <GroupedBarChart data={data as unknown as StandardChartData} />;
-    case 'stacked_bar': return <StackedBarChart data={data as unknown as StandardChartData} />;
-    case 'table': return <DataTable data={data as unknown as StandardChartData} />;
-    default: return <p className="text-slate-500 text-sm">Unsupported: {type}</p>;
-  }
-}
-
 export default function InsightPanel() {
   const { 
     insightPanelOpen, activeInsight, closeInsight,
-    pinnedChart, setPinnedChart 
+    sessionCharts
   } = useUIState();
 
   const [panelWidth, setPanelWidth] = useState(400);
+  const [currentChartIndex, setCurrentChartIndex] = useState(0);
   const isResizing = useRef(false);
 
   useEffect(() => {
@@ -92,19 +73,25 @@ export default function InsightPanel() {
     document.body.style.cursor = 'col-resize';
   };
 
-  const insightToDisplay = activeInsight || pinnedChart;
+  // Determine which chart to display: prefer sessionCharts, then activeInsight
+  const hasMultipleCharts = sessionCharts.length > 1;
+  const insightToDisplay = hasMultipleCharts 
+    ? sessionCharts[currentChartIndex] 
+    : activeInsight;
 
-  const isCurrentPinned = insightToDisplay && pinnedChart && 
-    pinnedChart.type === insightToDisplay.type && 
-    JSON.stringify(pinnedChart.data) === JSON.stringify(insightToDisplay.data);
-
-  const togglePin = () => {
-    if (isCurrentPinned) {
-      setPinnedChart(null);
-    } else if (insightToDisplay) {
-      setPinnedChart(insightToDisplay);
+  const handlePrevChart = () => {
+    if (hasMultipleCharts) {
+      setCurrentChartIndex((prev) => (prev - 1 + sessionCharts.length) % sessionCharts.length);
     }
   };
+
+  const handleNextChart = () => {
+    if (hasMultipleCharts) {
+      setCurrentChartIndex((prev) => (prev + 1) % sessionCharts.length);
+    }
+  };
+
+
 
   return (
     <>
@@ -157,27 +144,35 @@ export default function InsightPanel() {
           <div className="min-w-0 flex-1">
             <p className="text-[10px] font-semibold uppercase tracking-[0.15em] text-white/25 flex items-center gap-2">
               Visualization
-              {isCurrentPinned && (
-                <span className="text-brand-indigo inline-flex items-center gap-1"><Pin className="w-2.5 h-2.5" /> Pinned</span>
+              {hasMultipleCharts && (
+                <span className="text-brand-cyan">{currentChartIndex + 1} / {sessionCharts.length}</span>
               )}
             </p>
             <p className="truncate text-sm font-semibold text-slate-200">
               {insightToDisplay?.title ?? (insightToDisplay ? chartTypeLabel(insightToDisplay.type) : 'No insight')}
             </p>
           </div>
-          {insightToDisplay && (
-            <button
-              onClick={togglePin}
-              className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg transition-colors duration-150 mr-1 ${
-                isCurrentPinned 
-                  ? 'text-brand-indigo bg-brand-indigo/10 hover:bg-brand-indigo/20' 
-                  : 'text-slate-500 hover:text-slate-300 hover:bg-white/5'
-              }`}
-              aria-label={isCurrentPinned ? "Unpin chart" : "Pin chart"}
-            >
-              {isCurrentPinned ? <PinOff className="h-4 w-4" /> : <Pin className="h-4 w-4" />}
-            </button>
+          
+          {/* Navigation controls for multiple charts */}
+          {hasMultipleCharts && (
+            <div className="flex items-center gap-1">
+              <button
+                onClick={handlePrevChart}
+                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-slate-500 transition-colors duration-150 hover:text-slate-300 hover:bg-white/5"
+                aria-label="Previous chart"
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </button>
+              <button
+                onClick={handleNextChart}
+                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-slate-500 transition-colors duration-150 hover:text-slate-300 hover:bg-white/5"
+                aria-label="Next chart"
+              >
+                <ChevronRight className="h-4 w-4" />
+              </button>
+            </div>
           )}
+          
           <button
             onClick={closeInsight}
             className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-slate-500 transition-colors duration-150 hover:bg-white/5 hover:text-white"
@@ -217,11 +212,9 @@ export default function InsightPanel() {
                 {renderChart(insightToDisplay.type, insightToDisplay.data)}
               </div>
 
-              {!isCurrentPinned && (
-                <p className="mt-5 text-xs text-white/20 text-center">
-                  Click a chart chip in the conversation to update this panel.
-                </p>
-              )}
+              <p className="mt-5 text-xs text-white/20 text-center">
+                Click a chart chip in the conversation to update this panel.
+              </p>
             </div>
           ) : (
             /* Empty state */

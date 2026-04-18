@@ -10,24 +10,25 @@ interface PinnedChartState {
   type: ChartType;
   data: ChartData;
   title?: string;
+  id?: string; // unique identifier for the chart
 }
 
 interface UIStateContextType {
-  pinnedChart: PinnedChartState | null;
-  setPinnedChart: (chart: PinnedChartState | null) => void;
   isSnapshotMode: boolean;
   toggleSnapshotMode: () => Promise<void>;
   // InsightPanel
   insightPanelOpen: boolean;
   activeInsight: PinnedChartState | null;
+  sessionCharts: PinnedChartState[]; // All charts in current session
   openInsight: (type: ChartType, data: ChartData, title?: string) => void;
+  openInsightWithAll: (charts: PinnedChartState[], activeIndex?: number) => void; // Open with all charts
+  registerChart: (chart: PinnedChartState) => void;
   closeInsight: () => void;
 }
 
 const UIStateContext = createContext<UIStateContextType | undefined>(undefined);
 
 export function UIStateProvider({ children }: { children: React.ReactNode }) {
-  const [pinnedChart, setPinnedChart] = useState<PinnedChartState | null>(null);
   const [isSnapshotMode, setIsSnapshotMode] = useState(false);
 
   const { showToast } = useToast();
@@ -35,18 +36,50 @@ export function UIStateProvider({ children }: { children: React.ReactNode }) {
   // InsightPanel state
   const [insightPanelOpen, setInsightPanelOpen] = useState(false);
   const [activeInsight, setActiveInsight] = useState<PinnedChartState | null>(null);
+  const [sessionCharts, setSessionCharts] = useState<PinnedChartState[]>([]);
 
   const pathname = usePathname();
 
-  // Chat-scoped active insight: clear when navigating to different chats
+  // Chat-scoped: clear when navigating to different chats
   useEffect(() => {
     setActiveInsight(null);
-    // If we only were showing active insight and not pinned, close the panel
+    setSessionCharts([]); // Clear all charts when changing chats
     setInsightPanelOpen(false);
   }, [pathname]);
 
+  const registerChart = useCallback((chart: PinnedChartState) => {
+    // Generate unique ID if not provided
+    const chartWithId = { 
+      ...chart, 
+      id: chart.id || `chart-${Date.now()}-${Math.random()}`
+    };
+    // Avoid duplicates - check if this exact chart already exists
+    setSessionCharts((prev) => {
+      const exists = prev.some(
+        (c) => c.type === chart.type && JSON.stringify(c.data) === JSON.stringify(chart.data)
+      );
+      return exists ? prev : [...prev, chartWithId];
+    });
+  }, []);
+
   const openInsight = useCallback((type: ChartType, data: ChartData, title?: string) => {
     setActiveInsight({ type, data, title });
+    setInsightPanelOpen(true);
+  }, []);
+
+  const openInsightWithAll = useCallback((charts: PinnedChartState[], activeIndex?: number) => {
+    // Update session charts with the provided ones
+    setSessionCharts(
+      charts.map((c, idx) => ({
+        ...c,
+        id: c.id || `chart-${Date.now()}-${idx}`,
+      }))
+    );
+    // Set active insight to the specified index or first one
+    const idx = activeIndex ?? 0;
+    if (charts[idx]) {
+      setActiveInsight(charts[idx]);
+    }
     setInsightPanelOpen(true);
   }, []);
 
@@ -54,7 +87,7 @@ export function UIStateProvider({ children }: { children: React.ReactNode }) {
     setInsightPanelOpen(false);
   }, []);
 
-  const toggleSnapshotMode = async () => {
+  const toggleSnapshotMode = useCallback(async () => {
     try {
       const res = await postSnapshotToggle();
       const next = res.snapshotMode;
@@ -63,7 +96,7 @@ export function UIStateProvider({ children }: { children: React.ReactNode }) {
     } catch (e) {
       console.error('Failed to toggle snapshot mode:', e);
     }
-  };
+  }, [showToast]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -78,18 +111,19 @@ export function UIStateProvider({ children }: { children: React.ReactNode }) {
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [insightPanelOpen, closeInsight]);
+  }, [insightPanelOpen, closeInsight, toggleSnapshotMode]);
 
   return (
     <UIStateContext.Provider
       value={{
-        pinnedChart,
-        setPinnedChart,
         isSnapshotMode,
         toggleSnapshotMode,
         insightPanelOpen,
         activeInsight,
+        sessionCharts,
         openInsight,
+        openInsightWithAll,
+        registerChart,
         closeInsight,
       }}
     >

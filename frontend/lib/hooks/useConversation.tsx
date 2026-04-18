@@ -16,6 +16,7 @@ interface ConversationContextType {
   addMessage: (msg: Message) => void;
   isLoading: boolean;
   error: string | null;
+  isNewlyCreatedConversation: boolean;
 }
 
 const ConversationContext = createContext<ConversationContextType | undefined>(undefined);
@@ -26,6 +27,7 @@ export function ConversationProvider({ children }: { children: React.ReactNode }
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [activeConversationState, setActiveConversationState] = useState<Conversation | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
+  const [newlyCreatedConversationId, setNewlyCreatedConversationId] = useState<string | null>(null);
   
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -91,16 +93,44 @@ export function ConversationProvider({ children }: { children: React.ReactNode }
 
   const setActiveConversation = useCallback(
     (conversationOrId: Conversation | string | null) => {
+      console.log('setActiveConversation called with:', conversationOrId, 'newlyCreatedId:', newlyCreatedConversationId);
       if (conversationOrId === null) {
         setActiveConversationState(null);
+        setNewlyCreatedConversationId(null);
       } else if (typeof conversationOrId === 'string') {
         const found = conversations.find((c) => c.id === conversationOrId);
-        if (found) setActiveConversationState(found);
+        if (found) {
+          console.log('Found conversation in list:', found);
+          setActiveConversationState(found);
+          // If navigating to an existing conversation (not newly created), clear the flag
+          if (found.id !== newlyCreatedConversationId) {
+            setNewlyCreatedConversationId(null);
+          }
+        } else if (conversationOrId === newlyCreatedConversationId) {
+          // This is a newly created conversation that might not be in the list yet
+          // Create a temporary placeholder conversation
+          console.log('Conversation not found but matches newlyCreatedId, creating placeholder');
+          const placeholder: Conversation = {
+            id: conversationOrId,
+            datasetId: activeDataset?.id || '',
+            userId: '',
+            title: 'New Conversation',
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          };
+          setActiveConversationState(placeholder);
+        } else {
+          console.warn('Conversation not found:', conversationOrId);
+        }
       } else {
         setActiveConversationState(conversationOrId);
+        // If navigating to a conversation not in newly created list, clear flag
+        if (conversationOrId.id !== newlyCreatedConversationId) {
+          setNewlyCreatedConversationId(null);
+        }
       }
     },
-    [conversations]
+    [conversations, newlyCreatedConversationId, activeDataset]
   );
   
   const createNewConversation = useCallback(async (title?: string) => {
@@ -110,6 +140,7 @@ export function ConversationProvider({ children }: { children: React.ReactNode }
         const newConv = await createConversation(activeDataset.id, title);
         setConversations(prev => [newConv, ...prev]);
         setActiveConversationState(newConv);
+        setNewlyCreatedConversationId(newConv.id);
         return newConv;
     } catch (err: unknown) {
         const message = err instanceof Error ? err.message : 'Failed to create conversation';
@@ -136,6 +167,7 @@ export function ConversationProvider({ children }: { children: React.ReactNode }
         addMessage,
         isLoading,
         error,
+        isNewlyCreatedConversation: activeConversationState?.id === newlyCreatedConversationId && messages.length === 0,
       }}
     >
       {children}

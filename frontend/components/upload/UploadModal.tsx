@@ -46,6 +46,27 @@ export default function UploadModal({ onClose }: UploadModalProps) {
       return `${parseFloat((bytes / Math.pow(k, i)).toFixed(dm))} ${sizes[i]}`;
   }
 
+  const performUpload = useCallback(async (fileToUpload: File) => {
+      setIsProcessing(true);
+      setError(null);
+      try {
+        const result = await uploadDataset(fileToUpload);
+
+        setUnderstandingCard(result.understandingCard);
+        setUploadedDatasetId(result.dataset.id);
+        
+        // Step 3 (Intelligence Mapping)
+        setStep(3);
+        await refreshDatasets();
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : 'Upload failed. Please try again.';
+        setError(message);
+        // Do NOT go back to step 1. Stay on step 2 so they can retry.
+      } finally {
+        setIsProcessing(false);
+      }
+  }, [refreshDatasets]);
+
   const handleProcessFile = useCallback(
     async (file: File) => {
       if (!file.name.toLowerCase().endsWith('.csv')) {
@@ -69,7 +90,7 @@ export default function UploadModal({ onClose }: UploadModalProps) {
         const { redactedFile, redactedColumns: cols } = await runPIIShield(file);
         setRedactedColumns(cols);
         setRedactedFileMemo(redactedFile);
-        
+
         // Show step 2 for at least a beat
         setStep(2);
 
@@ -82,29 +103,8 @@ export default function UploadModal({ onClose }: UploadModalProps) {
         setIsProcessing(false);
       }
     },
-    [refreshDatasets],
+    [performUpload],
   );
-
-  const performUpload = async (fileToUpload: File) => {
-      setIsProcessing(true);
-      setError(null);
-      try {
-        const result = await uploadDataset(fileToUpload);
-
-        setUnderstandingCard(result.understandingCard);
-        setUploadedDatasetId(result.dataset.id);
-        
-        // Step 3 (Intelligence Mapping)
-        setStep(3);
-        await refreshDatasets();
-      } catch (err: unknown) {
-        const message = err instanceof Error ? err.message : 'Upload failed. Please try again.';
-        setError(message);
-        // Do NOT go back to step 1. Stay on step 2 so they can retry.
-      } finally {
-        setIsProcessing(false);
-      }
-  };
 
   const handleStartAsking = async () => {
     if (!uploadedDatasetId) return;
