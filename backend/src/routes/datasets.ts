@@ -22,6 +22,10 @@ import {
 } from '../semantic/embedder.js';
 import { mergeAllProfilerColumns, profilerToEnricherInput } from '../semantic/mergeProfile.js';
 import { generateStarterQuestions } from '../pipeline/starterQuestions.js';
+import {
+  scheduleDatasetOverviewJob,
+  setOverviewPending,
+} from '../pipeline/datasetOverview/runDatasetOverviewJob.js';
 
 /** Maximum accepted CSV file size: 50 MB (Phase 7 boundary test). */
 export const MAX_CSV_UPLOAD_BYTES = 50 * 1024 * 1024;
@@ -653,6 +657,9 @@ export default async function datasetsRoutes(fastify: FastifyInstance) {
       await client.query('COMMIT');
 
       const row = rows[0]!;
+      await setOverviewPending(fastify, datasetId);
+      scheduleDatasetOverviewJob(fastify, datasetId);
+
       return reply.send({
         id: row.id,
         datasetId,
@@ -1014,8 +1021,8 @@ export default async function datasetsRoutes(fastify: FastifyInstance) {
           id: string;
           updated_at: string;
         }>(
-          `INSERT INTO semantic_states (dataset_id, schema_json, understanding_card)
-           VALUES ($1, $2::jsonb, $3)
+          `INSERT INTO semantic_states (dataset_id, schema_json, understanding_card, overview_status)
+           VALUES ($1, $2::jsonb, $3, 'pending')
            RETURNING id, updated_at`,
           [datasetId, JSON.stringify(schemaJson), plan.understandingCard],
         );
@@ -1054,6 +1061,10 @@ export default async function datasetsRoutes(fastify: FastifyInstance) {
       client.release();
     }
 
+    for (const r of outResults) {
+      scheduleDatasetOverviewJob(fastify, r.semanticState.datasetId);
+    }
+
     const first = outResults[0]!;
     return reply.send({
       uploadBatchId,
@@ -1064,4 +1075,65 @@ export default async function datasetsRoutes(fastify: FastifyInstance) {
       piiSummary: piiSummaryOut,
     });
   });
+
+  // GET /api/datasets/:datasetId/overview — async dataset overview (stats + charts)
+  fastify.get<{ Params: { datasetId: string } }>(
+    '/datasets/:datasetId/overview',
+    async (request, reply) => {
+      const { datasetId } = request.params;
+
+      const { rows } = await fastify.db.query<{
+        overview_status: string | null;
+        overview_json: unknown;
+        overview_error: string | null;
+        overview_generated_at: string | null;
+        overview_model: string | null;
+      }>(
+        `SELECT ss.overview_status, ss.overview_json, ss.overview_error,
+                ss.overview_generated_at, ss.overview_model
+         FROM semantic_states ss
+         INNER JOIN datasets d ON d.id = ss.dataset_id
+         WHERE ss.dataset_id = $1::uuid AND (d.user_id = $2::uuid OR d.is_demo = true)`,
+        [datasetId, request.userId],
+      );
+
+      if (rows.length === 0) {
+        return reply.status(404).send({ error: 'Dataset not found' });
+      }
+
+      const row = rows[0]!;
+      let status = row.overview_status;
+
+      if (status === null || status === undefined) {
+        await fastify.db.query(
+          `UPDATE semantic_states
+           SET overview_status = 'pending', overview_error = NULL
+           WHERE dataset_id = $1::uuid AND overview_status IS NULL`,
+          [datasetId],
+        );
+        scheduleDatasetOverviewJob(fastify, datasetId);
+        status = 'pending';
+      }
+
+      if (status === 'pending') {
+        return {
+          status: 'pending' as const,
+        };
+      }
+
+      if (status === 'failed') {
+        return {
+          status: 'failed' as const,
+          error: row.overview_error ?? 'Overview could not be generated',
+        };
+      }
+
+      return {
+        status: 'ready' as const,
+        overview: row.overview_json,
+        overviewModel: row.overview_model,
+        generatedAt: row.overview_generated_at,
+      };
+    },
+  );
 }

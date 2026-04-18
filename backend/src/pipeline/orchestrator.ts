@@ -13,8 +13,9 @@ import {
   incrementResponseCacheHits,
   storeResponseCache,
 } from '../cache/responseCache.js';
-import { generateSql, type SqlGenerationPath } from './sqlGenerator.js';
-import { runPlanner } from './planner.js';
+import { generateSql, type GenerateSqlResult, type SqlGenerationPath } from './sqlGenerator.js';
+import { runPlanner, type PlannerOutput } from './planner.js';
+import { applyPlannerGroundingGuard, buildGroundingFallbackReply } from './plannerGroundingGuard.js';
 import { validateSql } from './sqlValidator.js';
 import { executeReadOnlySql, type ResultRow } from './dbExecutor.js';
 import { runSecondaryQuery } from './secondaryQuery.js';
@@ -434,44 +435,23 @@ export async function runQueryOrchestration(input: QueryOrchestrationInput): Pro
   }));
 
   try {
-    await sendStep(reply, {
-      step: 'planner',
-      status: 'running',
-      detail: 'Understanding your question…',
-    });
-
-    const tPlannerStart = Date.now();
-    const plan = await runPlanner({
-      question,
-      columns: plannerColumns,
-      understandingCard,
-      sessionExchanges: sessionContext.recentExchanges.slice(-3),
-      lastResultSetSummary: summarizeLastResultSet(sessionContext.lastResultSet),
-    });
-    tel.latencyPlannerMs = Date.now() - tPlannerStart;
-    tel.intent = plan.intent;
-
-    await sendStep(reply, {
-      step: 'planner',
-      status: 'complete',
-      detail: 'Identified intent and relevant columns',
-      intent: plan.intent,
-      relevantColumns: plan.relevantColumns,
-    });
-
-    if (plan.intent === 'conversational') {
-      await sendStep(reply, { step: 'narration', status: 'running', detail: 'Writing your answer' });
+    async function deliverConversationalAnswer(
+      narrativeText: string,
+      _sourcePlan: PlannerOutput,
+    ): Promise<void> {
       const text =
-        plan.conversationalReply?.trim() ||
+        narrativeText.trim() ||
         "I'm here to help you explore this dataset. Ask a question about your data in plain English.";
+      tel.intent = 'conversational';
+      await sendStep(reply, { step: 'narration', status: 'running', detail: 'Writing your answer' });
       await sendStep(reply, { step: 'narration', status: 'complete', detail: 'Done' });
       const followUpSuggestions = await generateContextualFollowUps({
         question,
         narrative: text,
         understandingCard: understandingCard ?? '',
         columns,
-        relevantColumns: plan.relevantColumns,
-        intent: plan.intent,
+        relevantColumns: [],
+        intent: 'conversational',
         rowCount: 0,
       });
       const conversationalPayload: QueryResultPayload = {
@@ -518,6 +498,52 @@ export async function runQueryOrchestration(input: QueryOrchestrationInput): Pro
         confidenceScore: 100,
         cacheHit: 'none',
       });
+    }
+
+    await sendStep(reply, {
+      step: 'planner',
+      status: 'running',
+      detail: 'Understanding your question…',
+    });
+
+    const tPlannerStart = Date.now();
+    let plan = await runPlanner({
+      question,
+      columns: plannerColumns,
+      understandingCard,
+      sessionExchanges: sessionContext.recentExchanges.slice(-3),
+      lastResultSetSummary: summarizeLastResultSet(sessionContext.lastResultSet),
+    });
+    tel.latencyPlannerMs = Date.now() - tPlannerStart;
+
+    const allowedNames = new Set(columns.map((c) => c.columnName));
+    const grounding = applyPlannerGroundingGuard(plan, {
+      tableName,
+      allowedColumnNames: allowedNames,
+      understandingCard,
+    });
+    plan = grounding.plan;
+    if (grounding.coerced) {
+      fastify.log.info(
+        { question: question.slice(0, 160) },
+        'planner grounding guard coerced to conversational',
+      );
+    }
+    tel.intent = plan.intent;
+
+    await sendStep(reply, {
+      step: 'planner',
+      status: 'complete',
+      detail: 'Identified intent and relevant columns',
+      intent: plan.intent,
+      relevantColumns: plan.relevantColumns,
+    });
+
+    if (plan.intent === 'conversational') {
+      const text =
+        plan.conversationalReply?.trim() ||
+        "I'm here to help you explore this dataset. Ask a question about your data in plain English.";
+      await deliverConversationalAnswer(text, plan);
       return;
     }
 
@@ -597,13 +623,21 @@ export async function runQueryOrchestration(input: QueryOrchestrationInput): Pro
     });
 
     const tSqlStart = Date.now();
-    const gen = await generateSql({
-      question,
-      tableName,
-      columns,
-      metricDefinitions: '',
-      sqlTierMode: plan.intent === 'complex_query' ? 'complex' : 'simple',
-    });
+    let gen: GenerateSqlResult;
+    try {
+      gen = await generateSql({
+        question,
+        tableName,
+        columns,
+        metricDefinitions: '',
+        sqlTierMode: plan.intent === 'complex_query' ? 'complex' : 'simple',
+      });
+    } catch (e) {
+      fastify.log.warn({ err: e }, 'generateSql failed; conversational fallback');
+      tel.sqlValid = false;
+      await deliverConversationalAnswer(buildGroundingFallbackReply(understandingCard), plan);
+      return;
+    }
     tel.latencySqlMs = Date.now() - tSqlStart;
     tel.sqlPath = gen.path;
 
@@ -631,9 +665,11 @@ export async function runQueryOrchestration(input: QueryOrchestrationInput): Pro
     const validation = validateSql(gen.sql, [tableName]);
     tel.sqlValid = validation.valid;
     if (!validation.valid) {
-      await sendError(reply, validation.reason, false);
-      reply.sse.close();
-      await flushTelemetry();
+      fastify.log.warn(
+        { reason: validation.reason, sqlPreview: gen.sql?.slice(0, 240) },
+        'validateSql failed; conversational fallback',
+      );
+      await deliverConversationalAnswer(buildGroundingFallbackReply(understandingCard), plan);
       return;
     }
 
@@ -645,7 +681,15 @@ export async function runQueryOrchestration(input: QueryOrchestrationInput): Pro
 
     // ── Person A: execute via readonly_agent role ──
     const tDbStart = Date.now();
-    const exec = await executeReadOnlySql(fastify.db, gen.sql);
+    let exec: Awaited<ReturnType<typeof executeReadOnlySql>>;
+    try {
+      exec = await executeReadOnlySql(fastify.db, gen.sql);
+    } catch (e) {
+      fastify.log.warn({ err: e }, 'executeReadOnlySql failed; conversational fallback');
+      tel.sqlValid = false;
+      await deliverConversationalAnswer(buildGroundingFallbackReply(understandingCard), plan);
+      return;
+    }
     tel.latencyDbMs = Date.now() - tDbStart;
     const rows = exec.rows;
     tel.rowsReturned = rows.length;

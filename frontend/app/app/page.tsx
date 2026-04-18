@@ -60,7 +60,7 @@ export default function AppPage() {
         </div>
         <h3 className="mb-2 font-serif text-xl font-semibold text-slate-200">No datasets yet</h3>
         <p className="mb-6 max-w-md text-sm text-slate-400">
-          Upload a CSV to get started. Demo datasets will appear here once your workspace is provisioned.
+          Upload a CSV to get started. Your datasets will show up here.
         </p>
         <button
           type="button"

@@ -15,6 +15,7 @@ interface NonTechSidebarProps {
   onNavigate?: () => void;
   onViewDataset?: () => void;
   onSemanticCorrections?: () => void;
+  onDatasetOverview?: () => void;
   isCollapsed?: boolean;
   onToggleCollapse?: () => void;
 }
@@ -34,6 +35,7 @@ export default function NonTechSidebar({
   onNavigate,
   onViewDataset,
   onSemanticCorrections,
+  onDatasetOverview,
   isCollapsed = false,
   onToggleCollapse,
 }: NonTechSidebarProps) {
@@ -84,7 +86,6 @@ export default function NonTechSidebar({
 
   const handleRenameDataset = useCallback(
     (dataset: Dataset, newName: string) => {
-      if (dataset.isDemo) return;
       void (async () => {
         setSidebarMutating(true);
         try {
@@ -102,7 +103,6 @@ export default function NonTechSidebar({
 
   const handleDeleteDataset = useCallback(
     (dataset: Dataset) => {
-      if (dataset.isDemo) return;
       showDeleteConfirm(dataset, 'dataset', async () => {
         setSidebarMutating(true);
         try {
@@ -169,6 +169,7 @@ export default function NonTechSidebar({
         isCreatingChat={vm.isCreatingChat}
         onViewDataset={onViewDataset}
         onSemanticCorrections={onSemanticCorrections}
+        onDatasetOverview={onDatasetOverview}
         isCollapsed={isCollapsed}
         onToggleCollapse={onToggleCollapse}
       />

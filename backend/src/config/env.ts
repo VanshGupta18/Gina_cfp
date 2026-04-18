@@ -36,6 +36,10 @@ const envSchema = z.object({
   GEMINI_API_KEY_1: z.string().min(1),
   GEMINI_API_KEY_2: z.string().default(''),
   GEMINI_MODEL: z.string().min(1),
+  /** Empty → same as GEMINI_MODEL. Used for async dataset overview layout. */
+  GEMINI_MODEL_DATASET_OVERVIEW: z.string().optional().default(''),
+  /** Max time for one Gemini dataset-overview call (ms). */
+  DATASET_OVERVIEW_GEMINI_TIMEOUT_MS: z.coerce.number().int().positive().default(90_000),
 
   USE_GEMINI_NARRATOR: boolFromEnv,
   /** When true, log Hugging Face SQL tier errors and invalid HF SQL validation reasons to stderr (dev/debug). */

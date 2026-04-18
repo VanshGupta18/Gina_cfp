@@ -20,7 +20,11 @@ if (!url) {
   process.exit(1);
 }
 
-const migrationFiles = ['001_initial_schema.sql', '002_dataset_content_hash.sql'];
+const migrationFiles = [
+  '001_initial_schema.sql',
+  '002_dataset_content_hash.sql',
+  '003_semantic_states_dataset_overview.sql',
+];
 
 for (const name of migrationFiles) {
   const migrationFile = join(root, 'migrations', name);

@@ -73,7 +73,7 @@ export function CorrectionModal({ datasetId, onClose, onSuccess }: CorrectionMod
         message.includes('Semantic state not found')
       ) {
         message =
-          'Cannot update this dataset. You may not own it (e.g. demo datasets are read-only for corrections).';
+          'Cannot update this dataset. You may not own it, or it may no longer be available.';
       }
       setError(message);
     } finally {

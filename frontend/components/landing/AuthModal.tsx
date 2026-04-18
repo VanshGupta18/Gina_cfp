@@ -3,7 +3,6 @@
 import { useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { Sparkles } from 'lucide-react';
-import Link from 'next/link';
 import { Modal } from '@/components/ui/Modal';
 import { Button } from '@/components/ui/Button';
 
@@ -74,10 +73,6 @@ export default function AuthModal({ onClose }: AuthModalProps) {
             )}
             {isLoading ? 'Wait...' : 'Continue with Google'}
           </Button>
-
-          <Link href="/app" className="flex w-full items-center justify-center gap-3 rounded-xl border border-surface-border bg-surface-tertiary px-4 py-3.5 text-base font-medium text-slate-200 transition-all hover:bg-surface-border hover:text-white">
-            Explore with demo data
-          </Link>
         </div>
 
         <p className="mt-8 text-center text-xs text-slate-500 leading-relaxed max-w-[280px] self-center">

@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import TopBar from './TopBar';
 import NonTechSidebar from '@/components/sidebar/NonTechSidebar';
 import InsightPanel from './InsightPanel';
@@ -11,11 +11,13 @@ import { useDatasets } from '@/lib/hooks/useDatasets';
 import { DatasetActionsProvider } from '@/lib/context/DatasetActionsContext';
 import { DeleteConfirmProvider, useDeleteConfirm } from '@/lib/context/DeleteConfirmContext';
 import { DeleteConfirmCard } from '@/components/shared/DeleteConfirmCard';
+import type { Conversation, Dataset } from '@/types';
 
 function AppShellContent({ children }: { children: React.ReactNode }) {
   const { deleteItem, hideDeleteConfirm, performDelete, isDeleting } = useDeleteConfirm();
 
   const pathname = usePathname();
+  const router = useRouter();
   const [mobileRailOpen, setMobileRailOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [sidebarWidth, setSidebarWidth] = useState(240); // Default width in pixels
@@ -138,6 +140,12 @@ function AppShellContent({ children }: { children: React.ReactNode }) {
                 onNavigate={() => setMobileRailOpen(false)}
                 onViewDataset={() => setDatasetSheetOpen(true)}
                 onSemanticCorrections={() => setCorrectionOpen(true)}
+                onDatasetOverview={() => {
+                  if (activeDataset) {
+                    router.push(`/app/dataset/${activeDataset.id}/overview`);
+                    setMobileRailOpen(false);
+                  }
+                }}
                 isCollapsed={sidebarCollapsed}
                 onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
               />
@@ -182,8 +190,8 @@ function AppShellContent({ children }: { children: React.ReactNode }) {
                 itemType={deleteItem.type}
                 itemName={
                   deleteItem.type === 'dataset'
-                    ? (deleteItem.item as any).name
-                    : (deleteItem.item as any).title || 'Untitled'
+                    ? (deleteItem.item as Dataset).name
+                    : (deleteItem.item as Conversation).title || 'Untitled'
                 }
                 isLoading={isDeleting}
               />

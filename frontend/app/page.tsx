@@ -102,7 +102,7 @@ export default function LandingPage() {
           </div>
 
           <p className="text-sm text-slate-400">
-            Sign in with Google · No credit card required
+            Sign in with Google
           </p>
         </div>
       </main>

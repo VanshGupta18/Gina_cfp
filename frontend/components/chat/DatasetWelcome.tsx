@@ -1,7 +1,6 @@
 'use client';
 
 import type { Dataset } from '@/types';
-import DemoBadge from '@/components/sidebar/DemoBadge';
 import { Database } from 'lucide-react';
 
 interface DatasetWelcomeProps {
@@ -27,7 +26,6 @@ export function DatasetWelcome({ dataset }: DatasetWelcomeProps) {
             <p className="text-xs uppercase tracking-[0.14em] text-slate-500">Active Dataset</p>
             <p className="text-lg font-semibold text-white truncate">{dataset.name}</p>
           </div>
-          {dataset.isDemo && <DemoBadge />}
         </div>
 
         <p className="text-slate-300 text-sm leading-relaxed">

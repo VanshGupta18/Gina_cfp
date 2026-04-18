@@ -235,14 +235,14 @@ export default function WhatGinaProvides() {
                 Get started for free
               </button>
               <Link
-                href="/live-demo"
+                href="/how-it-works"
                 className="flex items-center gap-2 text-slate-300 hover:text-white border border-surface-border px-8 py-4 rounded-lg text-sm font-medium transition-colors hover:border-white/20"
               >
-                See Live Demo
+                How it works
                 <ArrowRight className="w-4 h-4" />
               </Link>
             </div>
-            <p className="mt-5 text-xs text-slate-500">No credit card required · Free forever plan</p>
+            <p className="mt-5 text-xs text-slate-500">Instant setup</p>
           </div>
         </section>
       </main>

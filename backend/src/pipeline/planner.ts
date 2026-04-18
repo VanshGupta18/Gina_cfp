@@ -58,12 +58,15 @@ Return JSON only (no markdown) with this shape:
 }
 
 Rules:
-- intent "conversational" for hi, thanks, what can you do, off-topic — set relevantColumns to [] and relevantTables to []. Optionally set conversationalReply to a short helpful reply.
+- intent "conversational" for hi, thanks, what can you do, jokes, chit-chat, or any question that is off-topic or cannot be answered from the schema — set relevantColumns to [] and relevantTables to []. Set conversationalReply to a short, friendly reply (you may be lightly humorous but stay professional).
+- CRITICAL: Use "conversational" (not simple_query/complex_query) when the user asks about concepts, metrics, or entities that do not appear in the Schema columns JSON (wrong domain, invented fields, unrelated topics). Do not guess column names.
+- Use "simple_query" or "complex_query" only when the question is clearly answerable using the exact columnName values listed in the schema. You must list every schema column your SQL would need in relevantColumns (exact strings from columnName).
+- If you would need a column that is not in the schema, use "conversational" instead and explain briefly that this dataset does not contain what they asked for.
 - "follow_up_cache" only when the user refers to the immediately previous tabular result and it can be answered without new SQL; set answerFromCache and cacheAnswer appropriately.
 - "simple_query" vs "complex_query": use simple for single aggregation/filter/ranking; complex for multi-step analysis, comparisons across time periods, root-cause style questions, or questions that need caveats (partial years, rates vs totals).
-- relevantColumns: raw column names from the schema that matter for SQL. For rates, per-order, per-customer, churn rate, or share questions, include both numerator and denominator columns (e.g. complaints and orders, churned_customers and active_customers) when both exist in the schema.
+- relevantColumns: raw column names from the schema that matter for SQL (must match columnName exactly). For rates, per-order, per-customer, churn rate, or share questions, include both numerator and denominator columns when both exist in the schema.
 - For relative time phrases ("last year", "YTD", "recent", "this quarter") or trend questions, include all date columns needed to filter or group (e.g. year, month, week_start_date, quarter) when present in the schema.
-- relevantTables: physical dataset table name(s) from context (e.g. dataset_xxx).
+- relevantTables: include only the physical dataset table name from context when using SQL intents (e.g. dataset_xxx). If unsure, list that table. For conversational intent, use [].
 
 Schema columns:
 ${JSON.stringify(input.columns, null, 2)}
