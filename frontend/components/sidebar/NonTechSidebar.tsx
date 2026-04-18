@@ -14,6 +14,7 @@ import type { Conversation, Dataset } from '@/types';
 interface NonTechSidebarProps {
   onNavigate?: () => void;
   isCollapsed?: boolean;
+  onToggleCollapse?: () => void;
 }
 
 /**
@@ -30,6 +31,7 @@ interface NonTechSidebarProps {
 export default function NonTechSidebar({
   onNavigate,
   isCollapsed = false,
+  onToggleCollapse,
 }: NonTechSidebarProps) {
   const router = useRouter();
   const vm = useSidebarViewModel();
@@ -159,6 +161,7 @@ export default function NonTechSidebar({
         activeDataset={vm.activeDataset}
         isCreatingChat={vm.isCreatingChat}
         isCollapsed={isCollapsed}
+        onToggleCollapse={onToggleCollapse}
       />
 
       {/* Main Content Area */}

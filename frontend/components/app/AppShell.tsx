@@ -144,6 +144,7 @@ function AppShellContent({ children }: { children: React.ReactNode }) {
               <NonTechSidebar
                 onNavigate={() => setMobileRailOpen(false)}
                 isCollapsed={sidebarCollapsed}
+                onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
               />
             </aside>
 
