@@ -154,9 +154,10 @@ export default function UploadModal({ onClose }: UploadModalProps) {
               className="h-1 rounded-full transition-all duration-300"
               style={{
                 width: step >= s ? '24px' : '8px',
-                background: step >= s
-                  ? 'linear-gradient(90deg, #5A4EE3, #3CE0D6)'
-                  : 'rgba(255,255,255,0.10)',
+                background:
+                  step >= s
+                    ? 'linear-gradient(90deg, #5A4EE3, #3CE0D6)'
+                    : 'rgba(255,255,255,0.10)',
               }}
             />
           ))}
@@ -180,12 +181,8 @@ export default function UploadModal({ onClose }: UploadModalProps) {
                 border: isDragging
                   ? '2px dashed rgba(90,78,227,0.7)'
                   : '2px dashed rgba(90,78,227,0.25)',
-                background: isDragging
-                  ? 'rgba(90,78,227,0.07)'
-                  : 'rgba(15,18,26,0.5)',
-                boxShadow: isDragging
-                  ? 'inset 0 0 40px rgba(90,78,227,0.08)'
-                  : 'none',
+                background: isDragging ? 'rgba(90,78,227,0.07)' : 'rgba(15,18,26,0.5)',
+                boxShadow: isDragging ? 'inset 0 0 40px rgba(90,78,227,0.08)' : 'none',
               }}
               onMouseEnter={(e) => {
                 if (!isDragging) {
@@ -218,9 +215,7 @@ export default function UploadModal({ onClose }: UploadModalProps) {
                 <UploadCloud className="w-7 h-7 text-brand-indigo-light" strokeWidth={1.5} />
               </div>
 
-              <h3 className="text-base font-semibold text-slate-200 mb-1">
-                Drop your spreadsheet here
-              </h3>
+              <h3 className="text-base font-semibold text-slate-200 mb-1">Drop your spreadsheet here</h3>
               <div className="text-sm text-slate-500 mb-3 inline-flex items-center gap-1">
                 or <span className="text-brand-indigo-light font-medium">click to browse</span>
               </div>
@@ -271,9 +266,7 @@ export default function UploadModal({ onClose }: UploadModalProps) {
                   <span className="text-base font-bold text-white">
                     {fileDetails?.name || 'dataset.csv'}
                   </span>
-                  <span className="text-sm text-slate-400">
-                    {fileDetails?.size || 'Unknown size'}
-                  </span>
+                  <span className="text-sm text-slate-400">{fileDetails?.size || 'Unknown size'}</span>
                 </div>
               </div>
             </div>

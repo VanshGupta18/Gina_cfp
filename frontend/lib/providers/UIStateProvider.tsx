@@ -2,55 +2,77 @@
 
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { usePathname } from 'next/navigation';
-import type { ChartType, ChartData, QueryResultTable } from '@/types';
+import type { ChartType, ChartData } from '@/types';
 import { postSnapshotToggle } from '@/lib/api/debug';
 import { useToast } from '@/lib/providers/ToastProvider';
 
-/** Right-hand insight panel: chart + optional raw SQL result table. */
-export interface InsightState {
+interface PinnedChartState {
   type: ChartType;
   data: ChartData;
   title?: string;
-  resultTable?: QueryResultTable | null;
-  resultTruncated?: boolean;
-  explanation?: string;
+  id?: string;
 }
 
 interface UIStateContextType {
-  pinnedChart: InsightState | null;
-  setPinnedChart: (chart: InsightState | null) => void;
   isSnapshotMode: boolean;
   toggleSnapshotMode: () => Promise<void>;
-  // InsightPanel
   insightPanelOpen: boolean;
-  activeInsight: InsightState | null;
-  openInsight: (insight: InsightState) => void;
+  activeInsight: PinnedChartState | null;
+  sessionCharts: PinnedChartState[];
+  openInsight: (type: ChartType, data: ChartData, title?: string) => void;
+  openInsightWithAll: (charts: PinnedChartState[], activeIndex?: number) => void;
+  registerChart: (chart: PinnedChartState) => void;
   closeInsight: () => void;
 }
 
 const UIStateContext = createContext<UIStateContextType | undefined>(undefined);
 
 export function UIStateProvider({ children }: { children: React.ReactNode }) {
-  const [pinnedChart, setPinnedChart] = useState<InsightState | null>(null);
   const [isSnapshotMode, setIsSnapshotMode] = useState(false);
 
   const { showToast } = useToast();
 
-  // InsightPanel state
   const [insightPanelOpen, setInsightPanelOpen] = useState(false);
-  const [activeInsight, setActiveInsight] = useState<InsightState | null>(null);
+  const [activeInsight, setActiveInsight] = useState<PinnedChartState | null>(null);
+  const [sessionCharts, setSessionCharts] = useState<PinnedChartState[]>([]);
 
   const pathname = usePathname();
 
-  // Chat-scoped active insight: clear when navigating to different chats
   useEffect(() => {
     setActiveInsight(null);
-    // If we only were showing active insight and not pinned, close the panel
+    setSessionCharts([]);
     setInsightPanelOpen(false);
   }, [pathname]);
 
-  const openInsight = useCallback((insight: InsightState) => {
-    setActiveInsight(insight);
+  const registerChart = useCallback((chart: PinnedChartState) => {
+    const chartWithId = {
+      ...chart,
+      id: chart.id || `chart-${Date.now()}-${Math.random()}`,
+    };
+    setSessionCharts((prev) => {
+      const exists = prev.some(
+        (c) => c.type === chart.type && JSON.stringify(c.data) === JSON.stringify(chart.data),
+      );
+      return exists ? prev : [...prev, chartWithId];
+    });
+  }, []);
+
+  const openInsight = useCallback((type: ChartType, data: ChartData, title?: string) => {
+    setActiveInsight({ type, data, title });
+    setInsightPanelOpen(true);
+  }, []);
+
+  const openInsightWithAll = useCallback((charts: PinnedChartState[], activeIndex?: number) => {
+    setSessionCharts(
+      charts.map((c, idx) => ({
+        ...c,
+        id: c.id || `chart-${Date.now()}-${idx}`,
+      })),
+    );
+    const idx = activeIndex ?? 0;
+    if (charts[idx]) {
+      setActiveInsight(charts[idx]);
+    }
     setInsightPanelOpen(true);
   }, []);
 
@@ -58,7 +80,7 @@ export function UIStateProvider({ children }: { children: React.ReactNode }) {
     setInsightPanelOpen(false);
   }, []);
 
-  const toggleSnapshotMode = async () => {
+  const toggleSnapshotMode = useCallback(async () => {
     try {
       const res = await postSnapshotToggle();
       const next = res.snapshotMode;
@@ -67,7 +89,7 @@ export function UIStateProvider({ children }: { children: React.ReactNode }) {
     } catch (e) {
       console.error('Failed to toggle snapshot mode:', e);
     }
-  };
+  }, [showToast]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -75,25 +97,25 @@ export function UIStateProvider({ children }: { children: React.ReactNode }) {
         e.preventDefault();
         void toggleSnapshotMode();
       }
-      // Escape closes insight panel
       if (e.key === 'Escape' && insightPanelOpen) {
         closeInsight();
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [insightPanelOpen, closeInsight]);
+  }, [insightPanelOpen, closeInsight, toggleSnapshotMode]);
 
   return (
     <UIStateContext.Provider
       value={{
-        pinnedChart,
-        setPinnedChart,
         isSnapshotMode,
         toggleSnapshotMode,
         insightPanelOpen,
         activeInsight,
+        sessionCharts,
         openInsight,
+        openInsightWithAll,
+        registerChart,
         closeInsight,
       }}
     >

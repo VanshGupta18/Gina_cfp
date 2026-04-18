@@ -1,30 +1,24 @@
 'use client';
 
-import React, { memo } from 'react';
-import { OutputPayload } from '@/types';
-import { BarChart2, ArrowUpRight, Timer } from 'lucide-react';
+import React, { memo, useState, useEffect } from 'react';
+import { OutputPayload, ChartData, StandardChartData, BigNumberChartData, ChartType } from '@/types';
+import { Maximize2, ChevronDown, ChevronUp } from 'lucide-react';
 import { useUIState } from '@/lib/providers/UIStateProvider';
 
 import { KeyFigure } from './KeyFigure';
 import { NarrativeText } from './NarrativeText';
 import { CitationChips } from './CitationChips';
 import { SQLExpand } from './SQLExpand';
-import { ConfidenceIndicator } from './ConfidenceIndicator';
 import { FollowUpSuggestions } from './FollowUpSuggestions';
 import { SomethingOff } from './SomethingOff';
-import { DataTable } from '../charts/DataTable';
+import ChartRenderer from '../charts/ChartRenderer';
 
 export interface OutputCardProps {
   payload: OutputPayload;
   onCorrectionClick?: () => void;
 }
 
-function formatAnswerTime(ms: number): string {
-  if (!Number.isFinite(ms) || ms < 0) return '';
-  return `Answer ready in ${Math.round(ms)} ms`;
-}
-
-function chartLabel(type: string): string {
+function chartLabel(type: ChartType): string {
   switch (type) {
     case 'bar': return 'Bar Chart';
     case 'line': return 'Line Chart';
@@ -36,29 +30,64 @@ function chartLabel(type: string): string {
   }
 }
 
+function isStandardChartData(chartData: ChartData): chartData is StandardChartData {
+  return 'labels' in chartData && 'datasets' in chartData;
+}
+
+function isBigNumberChartData(chartData: ChartData): chartData is BigNumberChartData {
+  return 'value' in chartData;
+}
+
+function hasChartData(chartType?: ChartType, chartData?: ChartData): boolean {
+  if (!chartType || !chartData) return false;
+
+  if (chartType === 'big_number') {
+    if (!isBigNumberChartData(chartData)) return false;
+    const value = chartData.value;
+    return value !== undefined && value !== null && String(value).trim().length > 0;
+  }
+
+  if (!isStandardChartData(chartData)) {
+    return false;
+  }
+
+  const hasLabels = chartData.labels.length > 0;
+  const hasDatasets = chartData.datasets.length > 0;
+  const hasValues = chartData.datasets.some((dataset) => dataset.data.length > 0);
+
+  return hasLabels && hasDatasets && hasValues;
+}
+
 function OutputCardImpl({ payload, onCorrectionClick }: OutputCardProps) {
-  const { openInsight } = useUIState();
+  const { openInsightWithAll, registerChart, sessionCharts } = useUIState();
+  const [isExpanded, setIsExpanded] = useState(false);
 
-  if (!payload) return null;
+  const hasChart = hasChartData(payload.chartType, payload.chartData);
+  const isGraphical = hasChart && payload.chartType !== 'table';
 
-  const hasChart = payload.chartType && payload.chartData;
-  // Tables render inline for readability; we still offer Insights for chart vs raw SQL data tabs.
-  const showTableInline = payload.chartType === 'table';
+  useEffect(() => {
+    if (hasChart) {
+      registerChart({
+        type: payload.chartType!,
+        data: payload.chartData!,
+        title: chartLabel(payload.chartType!),
+      });
+    }
+  }, [hasChart, payload.chartType, payload.chartData, registerChart]);
 
-  const openThisInsight = () =>
-    openInsight({
-      type: payload.chartType!,
-      data: payload.chartData!,
-      title: chartLabel(payload.chartType!),
-      resultTable: payload.resultTable ?? null,
-      resultTruncated: payload.resultTruncated,
-      explanation: payload.explanation,
-    });
+  const handleOpenAllCharts = () => {
+    if (sessionCharts.length > 0) {
+      const activeIndex = sessionCharts.findIndex(
+        (c) =>
+          c.type === payload.chartType &&
+          JSON.stringify(c.data) === JSON.stringify(payload.chartData),
+      );
+      openInsightWithAll(sessionCharts, Math.max(0, activeIndex));
+    }
+  };
 
   return (
     <div className="flex flex-col gap-5">
-
-      {/* Main insight card */}
       <div
         className="rounded-2xl p-6"
         style={{
@@ -67,84 +96,62 @@ function OutputCardImpl({ payload, onCorrectionClick }: OutputCardProps) {
           boxShadow: '0 4px 32px rgba(0,0,0,0.25), inset 0 1px 0 rgba(255,255,255,0.04)',
         }}
       >
-        {/* Top: key figure + confidence */}
-        <div className="flex items-start justify-between mb-5">
+        <div className="mb-5">
           <KeyFigure text={payload.keyFigure} />
-          <ConfidenceIndicator score={payload.confidenceScore} />
         </div>
 
-        {/* Narrative */}
         <div className="prose prose-invert prose-slate max-w-none text-slate-300 text-sm leading-relaxed mb-5">
           <NarrativeText text={payload.narrative} />
         </div>
 
-        {/* Chart chip — open right Insight panel (chart + returned data tabs) */}
-        {hasChart && !showTableInline && (
+        {hasChart && (
           <div
-            className="mt-2 pt-4"
+            className="relative mt-4 pt-4 group"
             style={{ borderTop: '1px solid rgba(255,255,255,0.06)' }}
           >
-            <button
-              onClick={openThisInsight}
-              className="group inline-flex items-center gap-2.5 rounded-xl px-4 py-2.5 text-sm font-medium text-white transition-all duration-200"
-              style={{
-                background: 'rgba(90,78,227,0.10)',
-                border: '1px solid rgba(90,78,227,0.25)',
-              }}
-              onMouseEnter={(e) => {
-                const el = e.currentTarget as HTMLButtonElement;
-                el.style.background = 'rgba(90,78,227,0.18)';
-                el.style.borderColor = 'rgba(90,78,227,0.50)';
-                el.style.boxShadow = '0 4px 16px rgba(90,78,227,0.2)';
-              }}
-              onMouseLeave={(e) => {
-                const el = e.currentTarget as HTMLButtonElement;
-                el.style.background = 'rgba(90,78,227,0.10)';
-                el.style.borderColor = 'rgba(90,78,227,0.25)';
-                el.style.boxShadow = '';
-              }}
+            <div
+              className={`overflow-hidden transition-all duration-300 relative ${isGraphical && !isExpanded ? 'max-h-[200px]' : 'max-h-[1000px]'}`}
             >
-              <BarChart2 className="h-4 w-4 text-brand-cyan shrink-0" />
-              <span>
-                View{' '}
-                <span className="text-brand-cyan font-semibold">
-                  {chartLabel(payload.chartType!)}
-                </span>{' '}
-                in Insights
-              </span>
-              <ArrowUpRight className="h-3.5 w-3.5 text-brand-indigo-light opacity-70 transition-transform duration-150 group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
-            </button>
-          </div>
-        )}
+              <ChartRenderer
+                type={payload.chartType!}
+                data={payload.chartData!}
+                isInline={!isExpanded}
+              />
 
-        {/* Data table: rendered inline (tables don't benefit from a separate panel) */}
-        {hasChart && showTableInline && (
-          <div
-            className="mt-4 pt-4"
-            style={{ borderTop: '1px solid rgba(255,255,255,0.06)' }}
-          >
-            <DataTable data={payload.chartData as never} />
-            <div className="mt-4">
+              {isGraphical && !isExpanded && (
+                <div className="absolute bottom-0 left-0 right-0 h-20 bg-gradient-to-t from-[#141822] to-transparent pointer-events-none" />
+              )}
+
               <button
                 type="button"
-                onClick={openThisInsight}
-                className="group inline-flex items-center gap-2.5 rounded-xl px-4 py-2.5 text-sm font-medium text-white transition-all duration-200"
-                style={{
-                  background: 'rgba(90,78,227,0.10)',
-                  border: '1px solid rgba(90,78,227,0.25)',
-                }}
+                onClick={handleOpenAllCharts}
+                className="absolute top-4 right-4 p-2 rounded-lg bg-slate-800/80 border border-white/10 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-slate-700 z-10"
+                title={sessionCharts.length > 1 ? `View all ${sessionCharts.length} charts` : 'View in Insights'}
               >
-                <BarChart2 className="h-4 w-4 text-brand-cyan shrink-0" />
-                <span>
-                  Open in Insights <span className="text-brand-cyan font-semibold">(chart &amp; raw data)</span>
-                </span>
-                <ArrowUpRight className="h-3.5 w-3.5 text-brand-indigo-light opacity-70 transition-transform duration-150 group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
+                <Maximize2 className="w-4 h-4 text-white" />
               </button>
             </div>
+
+            {isGraphical && (
+              <button
+                type="button"
+                onClick={() => setIsExpanded(!isExpanded)}
+                className="w-full mt-2 flex items-center justify-center gap-1 text-xs font-medium text-slate-400 hover:text-white transition-colors py-1"
+              >
+                {isExpanded ? (
+                  <>
+                    <ChevronUp className="w-3 h-3" /> Show Less
+                  </>
+                ) : (
+                  <>
+                    <ChevronDown className="w-3 h-3" /> Show More
+                  </>
+                )}
+              </button>
+            )}
           </div>
         )}
 
-        {/* Citations */}
         {payload.citationChips && payload.citationChips.length > 0 && (
           <div
             className="mt-5 pt-4"
@@ -153,23 +160,8 @@ function OutputCardImpl({ payload, onCorrectionClick }: OutputCardProps) {
             <CitationChips citations={payload.citationChips} />
           </div>
         )}
-
-        {payload.totalTimeMs != null &&
-          Number.isFinite(payload.totalTimeMs) &&
-          payload.totalTimeMs >= 0 && (
-            <div
-              className="mt-4 flex items-center justify-end gap-1.5 border-t pt-3"
-              style={{ borderTop: '1px solid rgba(255,255,255,0.06)' }}
-            >
-              <Timer className="h-3.5 w-3.5 shrink-0 text-slate-600" aria-hidden />
-              <span className="text-[11px] font-medium tabular-nums tracking-wide text-slate-500">
-                {formatAnswerTime(payload.totalTimeMs)}
-              </span>
-            </div>
-          )}
       </div>
 
-      {/* SQL Details */}
       {(payload.sql || payload.secondarySql) && (
         <SQLExpand
           sql={payload.sql}
@@ -179,12 +171,12 @@ function OutputCardImpl({ payload, onCorrectionClick }: OutputCardProps) {
         />
       )}
 
-      {/* Follow-ups + corrections */}
-      <div className="flex flex-col gap-4">
-        <FollowUpSuggestions suggestions={payload.followUpSuggestions} />
-        <SomethingOff onCorrectionClick={onCorrectionClick} />
-      </div>
-
+      {(payload.followUpSuggestions?.length || onCorrectionClick) && (
+        <div className="flex flex-col gap-4">
+          <FollowUpSuggestions suggestions={payload.followUpSuggestions} />
+          <SomethingOff onCorrectionClick={onCorrectionClick} />
+        </div>
+      )}
     </div>
   );
 }

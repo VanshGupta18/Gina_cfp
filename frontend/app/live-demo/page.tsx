@@ -9,7 +9,7 @@ const exampleQueries = [
   {
     question: 'What was the total revenue in Q3?',
     result: '$2.4M',
-    confidence: '99.8%',
+    accuracy: 'Verified',
     rows: '12,847',
     sql: "SELECT SUM(revenue) FROM your_data WHERE quarter = 'Q3'",
     insight: 'Q3 revenue was $2.4M, up 18% from Q2. July was the strongest month at $920K.',
@@ -18,7 +18,7 @@ const exampleQueries = [
   {
     question: 'Which product had the highest return rate?',
     result: '14.3%',
-    confidence: '99.8%',
+    accuracy: 'Verified',
     rows: '8,203',
     sql: 'SELECT product_name, AVG(return_rate) as rate FROM your_data GROUP BY product_name ORDER BY rate DESC LIMIT 1',
     insight: '"Pro Wireless Headset" had the highest return rate at 14.3%, mainly due to connectivity issues reported in reviews.',
@@ -27,7 +27,7 @@ const exampleQueries = [
   {
     question: 'Show me the top 5 customers by spend.',
     result: 'Top: Acme Corp',
-    confidence: '100%',
+    accuracy: 'Highest',
     rows: '12,847',
     sql: 'SELECT customer_name, SUM(total_spend) as spend FROM your_data GROUP BY customer_name ORDER BY spend DESC LIMIT 5',
     insight: 'Top 5 customers account for 38% of total revenue. Acme Corp leads at $340K lifetime value.',
@@ -36,7 +36,7 @@ const exampleQueries = [
   {
     question: 'What is the average order value by region?',
     result: '$86.40',
-    confidence: '99.5%',
+    accuracy: 'Estimated',
     rows: '8,203',
     sql: 'SELECT region, AVG(order_value) as avg_value FROM your_data GROUP BY region ORDER BY avg_value DESC',
     insight: 'West region leads with $112 AOV. South is lowest at $64. Overall average is $86.40.',
@@ -45,16 +45,16 @@ const exampleQueries = [
   {
     question: 'How many new users signed up last month?',
     result: '3,842',
-    confidence: '99.8%',
+    accuracy: 'Verified',
     rows: '3,842',
     sql: "SELECT COUNT(user_id) FROM your_data WHERE signup_date >= DATE_TRUNC('month', CURRENT_DATE - INTERVAL '1 month')",
-    insight: '3,842 new users signed up last month — a 23% increase MoM. Organic search drove 61% of signups.',
+    insight: '3,842 new users signed month — a 23% increase MoM. Organic search drove 61% of signups.',
     chart: [2200, 2500, 2800, 3100, 3400, 3600, 3842],
   },
   {
     question: 'Which sales rep closed the most deals?',
     result: '94 deals',
-    confidence: '100%',
+    accuracy: 'Verified',
     rows: '8,203',
     sql: 'SELECT sales_rep, COUNT(deal_id) as deals FROM your_data GROUP BY sales_rep ORDER BY deals DESC LIMIT 1',
     insight: 'Sarah Johnson closed 94 deals this quarter — 31% above the team average of 72.',
@@ -65,7 +65,7 @@ const exampleQueries = [
 const stats = [
   { icon: Zap, label: 'Avg. response time', value: '1.8s' },
   { icon: BarChart3, label: 'Queries answered', value: '2.1M+' },
-  { icon: ShieldCheck, label: 'Accuracy rate', value: '99.8%' },
+  { icon: ShieldCheck, label: 'Accuracy score', value: 'High' },
 ];
 
 // Mini bar chart component
@@ -91,7 +91,6 @@ function MiniChart({ data, color = '#7267F2' }: { data: number[]; color?: string
 export default function LiveDemoPage() {
   const [showAuth, setShowAuth] = useState(false);
   const [activeQuery, setActiveQuery] = useState(0);
-  const [isAnimating, setIsAnimating] = useState(false);
   const [typedText, setTypedText] = useState('');
   const [showResult, setShowResult] = useState(true);
 
@@ -100,11 +99,9 @@ export default function LiveDemoPage() {
   const handleQuerySelect = (i: number) => {
     if (i === activeQuery) return;
     setShowResult(false);
-    setIsAnimating(true);
     setTypedText('');
     setTimeout(() => {
       setActiveQuery(i);
-      setIsAnimating(false);
     }, 300);
     setTimeout(() => {
       setShowResult(true);
@@ -126,7 +123,7 @@ export default function LiveDemoPage() {
       }
     }, 18);
     return () => clearInterval(interval);
-  }, [activeQuery, showResult]);
+  }, [current.sql, showResult]);
 
   return (
     <div className="min-h-screen bg-surface flex flex-col font-sans text-slate-200 selection:bg-brand-indigo/30">
@@ -263,7 +260,7 @@ export default function LiveDemoPage() {
                 <div className="grid grid-cols-3 gap-3 mb-5">
                   {[
                     { label: 'Result', value: current.result },
-                    { label: 'Confidence', value: current.confidence },
+                    { label: 'Accuracy', value: current.accuracy },
                     { label: 'Rows scanned', value: current.rows },
                   ].map((stat) => (
                     <div key={stat.label} className="rounded-xl bg-surface-tertiary border border-surface-border px-4 py-3">
