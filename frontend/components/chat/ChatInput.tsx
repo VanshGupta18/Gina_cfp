@@ -67,7 +67,10 @@ export function ChatInput({
   const canSubmit = hasInput && !isStreaming && !!activeConversation;
 
   return (
-    <div className="absolute bottom-0 left-0 right-0 p-5 bg-gradient-to-t from-surface via-surface/95 to-transparent">
+    <div
+      className="absolute bottom-0 left-0 right-0 p-5 bg-gradient-to-t from-surface via-surface/95 to-transparent"
+      style={{ fontFamily: 'Inter, sans-serif' }}
+    >
       <form
         ref={formRef}
         onSubmit={handleSubmit}
@@ -95,15 +98,15 @@ export function ChatInput({
             value={input}
             onChange={(e) => setInput(e.target.value)}
             disabled={isStreaming}
-            className="flex-1 h-auto bg-transparent border-none shadow-none py-4 pl-5 pr-2 text-sm text-slate-200 placeholder-slate-500 focus-visible:ring-0 focus:outline-none disabled:opacity-50 transition-all duration-500 ease-in-out"
-            style={{ fontStyle: 'normal' }}
+            className="flex-1 h-auto bg-transparent border-none shadow-none py-4 pl-5 pr-2 text-sm font-normal text-slate-200 placeholder:font-normal placeholder:italic placeholder-slate-500 focus-visible:ring-0 focus:outline-none disabled:opacity-50 transition-all duration-500 ease-in-out"
+            style={{ fontFamily: 'Inter, sans-serif' }}
           />
 
           <div className="pr-2 pl-1 flex items-center">
             <Button
               type="submit"
               disabled={!canSubmit}
-              className="px-5 py-2.5 font-semibold text-sm tracking-wide gap-2 shadow-none rounded-xl"
+              className="px-5 py-2.5 font-normal text-sm tracking-wide gap-2 shadow-none rounded-xl"
               style={
                 isStreaming
                   ? {

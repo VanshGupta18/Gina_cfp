@@ -12,6 +12,7 @@ export function DatasetWelcome({ dataset }: DatasetWelcomeProps) {
     <div
       className="relative overflow-hidden rounded-2xl p-6 md:p-7"
       style={{
+        fontFamily: 'Inter, sans-serif',
         background: 'linear-gradient(160deg, rgba(20,24,34,0.95) 0%, rgba(28,33,46,0.85) 100%)',
         border: '1px solid rgba(255,255,255,0.08)',
         boxShadow: '0 4px 32px rgba(0,0,0,0.25), inset 0 1px 0 rgba(255,255,255,0.04)',

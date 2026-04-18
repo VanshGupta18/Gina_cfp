@@ -41,7 +41,10 @@ export function RateLimitErrorPanel({
   };
 
   return (
-    <div className="flex items-start gap-4 rounded-lg border border-amber-500/30 bg-gradient-to-r from-amber-500/10 to-orange-500/10 p-4">
+    <div
+      className="flex items-start gap-4 rounded-lg border border-amber-500/30 bg-gradient-to-r from-amber-500/10 to-orange-500/10 p-4"
+      style={{ fontFamily: 'Inter, sans-serif' }}
+    >
       <div className="shrink-0 flex items-center justify-center w-8 h-8">
         <svg
           className="w-6 h-6 text-amber-400"
@@ -68,7 +71,7 @@ export function RateLimitErrorPanel({
         <div className="space-y-2">
           {countdown > 0 && (
             <div className="inline-flex items-center gap-2 rounded-md bg-amber-600/20 px-3 py-1.5">
-              <span className="text-xs font-medium text-amber-100">Retry available in:</span>
+              <span className="text-xs font-normal text-amber-100">Retry available in:</span>
               <span className="font-mono text-sm font-semibold text-amber-300">
                 {formatTime(countdown)}
               </span>
@@ -78,7 +81,7 @@ export function RateLimitErrorPanel({
           {countdown === 0 && retryAfterSeconds && (
             <button
               onClick={onRetry}
-              className="inline-flex items-center gap-2 rounded-md bg-brand-indigo px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-brand-indigo-light"
+              className="inline-flex items-center gap-2 rounded-md bg-brand-indigo px-4 py-2 text-sm font-normal text-white transition-colors hover:bg-brand-indigo-light"
             >
               <svg
                 className="w-4 h-4"

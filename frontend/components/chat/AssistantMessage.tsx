@@ -24,7 +24,7 @@ function AssistantMessageImpl({
   onCorrectionClick,
 }: AssistantMessageProps) {
   return (
-    <div className="flex justify-start mb-6">
+    <div className="flex justify-start mb-6" style={{ fontFamily: 'Inter, sans-serif' }}>
       <div className="w-full space-y-4">
         {/* While streaming, show the expanding Thinking Pill */}
         {isStreaming && (
@@ -45,7 +45,7 @@ function AssistantMessageImpl({
             <div className="w-10 h-10 rounded-xl bg-surface-secondary border border-surface-border flex items-center justify-center shrink-0">
                <Bot className="w-5 h-5 text-slate-400" />
             </div>
-            <div className="px-6 py-4 rounded-xl bg-surface-secondary border border-surface-border text-slate-300 text-sm shadow-sm grow-0 mr-auto max-w-[800px]">
+            <div className="px-6 py-4 rounded-xl bg-surface-secondary border border-surface-border text-slate-300 text-sm font-normal shadow-sm grow-0 mr-auto max-w-[800px]">
               {message.content}
             </div>
           </div>

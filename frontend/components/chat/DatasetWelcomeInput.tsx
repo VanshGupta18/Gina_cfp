@@ -29,12 +29,12 @@ export function DatasetWelcomeInput({ datasetId }: DatasetWelcomeInputProps) {
   };
 
   return (
-    <div className="mt-3 border-t border-white/10 pt-4">
+    <div className="mt-3 border-t border-white/10 pt-4" style={{ fontFamily: 'Inter, sans-serif' }}>
       <p className="mb-3 text-xs text-slate-400">Start a fresh conversation for this dataset.</p>
       <button
         onClick={handleNewChat}
         disabled={isCreating}
-        className="inline-flex w-fit items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/[0.03] px-4 py-2.5 text-sm font-medium text-brand-teal shadow-[0_8px_28px_rgba(0,0,0,0.2)] transition-all duration-200 hover:-translate-y-0.5 hover:border-brand-teal/40 hover:bg-brand-teal/[0.08] hover:text-[#6EF4EC] disabled:cursor-not-allowed disabled:border-white/10 disabled:bg-white/[0.02] disabled:text-brand-indigo-light/70"
+        className="inline-flex w-fit items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/[0.03] px-4 py-2.5 text-sm font-normal text-brand-teal shadow-[0_8px_28px_rgba(0,0,0,0.2)] transition-all duration-200 hover:-translate-y-0.5 hover:border-brand-teal/40 hover:bg-brand-teal/[0.08] hover:text-[#6EF4EC] disabled:cursor-not-allowed disabled:border-white/10 disabled:bg-white/[0.02] disabled:text-brand-indigo-light/70"
         aria-label={`Start new chat for dataset ${datasetId}`}
       >
         {isCreating ? (

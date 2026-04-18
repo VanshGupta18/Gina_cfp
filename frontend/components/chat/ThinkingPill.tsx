@@ -60,7 +60,7 @@ export function ThinkingPill({ steps, defaultExpanded = false }: ThinkingPillPro
               />
             ))}
           </div>
-          <span className="text-sm font-medium text-slate-300">
+          <span className="text-sm font-normal text-slate-300">
             Thinking
           </span>
           {steps.length > 0 && (

@@ -35,6 +35,7 @@ export function ConversationWelcome({
       className="max-w-4xl mx-auto px-6 py-14"
       data-conversation-id={conversationId}
       data-dataset-id={datasetId}
+      style={{ fontFamily: 'Inter, sans-serif' }}
     >
       <div
         className="rounded-2xl p-6"
@@ -54,7 +55,7 @@ export function ConversationWelcome({
           </div>
         </div>
 
-        <p className="text-slate-300 text-sm mb-4">
+        <p className="text-slate-300 text-sm font-normal mb-4">
           Use one of these prompts or write your own question below.
         </p>
 

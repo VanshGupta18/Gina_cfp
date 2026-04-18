@@ -136,7 +136,10 @@ export function ChatView() {
 
   if (!activeDataset) {
     return (
-      <div className="h-full flex items-center justify-center text-center text-slate-400">
+      <div
+        className="h-full flex items-center justify-center text-center text-slate-400 font-normal"
+        style={{ fontFamily: 'Inter, sans-serif' }}
+      >
         <p>Select a dataset to start chatting</p>
       </div>
     );
@@ -144,7 +147,7 @@ export function ChatView() {
 
   if (!activeConversation) {
     return (
-      <div className="flex flex-col relative h-full bg-[#0F121A]">
+      <div className="flex flex-col relative h-full bg-[#0F121A] font-normal" style={{ fontFamily: 'Inter, sans-serif' }}>
         <div
           className="h-20 px-8 flex items-center justify-between sticky top-0 z-10"
           style={{
@@ -155,13 +158,13 @@ export function ChatView() {
           }}
         >
           <div className="flex items-center gap-3">
-            <h2 className="text-lg font-bold font-serif text-white tracking-wide">{activeDataset.name}</h2>
+            <h2 className="text-lg font-semibold text-white tracking-wide">{activeDataset.name}</h2>
           </div>
           <div className="flex items-center gap-2">
             {onViewDataset && (
               <button
                 onClick={onViewDataset}
-                className="inline-flex items-center justify-center rounded-lg border border-white/10 px-3 py-1.5 text-xs font-medium text-slate-300 transition-colors hover:border-white/20 hover:bg-white/5 hover:text-white"
+                className="inline-flex items-center justify-center rounded-lg border border-white/10 px-3 py-1.5 text-xs font-normal text-slate-300 transition-colors hover:border-white/20 hover:bg-white/5 hover:text-white"
               >
                 View data
               </button>
@@ -169,7 +172,7 @@ export function ChatView() {
             {onSemanticCorrections && (
               <button
                 onClick={onSemanticCorrections}
-                className="inline-flex items-center justify-center rounded-lg border border-white/10 px-3 py-1.5 text-xs font-medium text-slate-300 transition-colors hover:border-white/20 hover:bg-white/5 hover:text-white"
+                className="inline-flex items-center justify-center rounded-lg border border-white/10 px-3 py-1.5 text-xs font-normal text-slate-300 transition-colors hover:border-white/20 hover:bg-white/5 hover:text-white"
               >
                 Semantic Corrections
               </button>
@@ -199,7 +202,7 @@ export function ChatView() {
   }
 
   return (
-    <div className="flex flex-col relative h-full bg-[#0F121A]">
+    <div className="flex flex-col relative h-full bg-[#0F121A] font-normal" style={{ fontFamily: 'Inter, sans-serif' }}>
       <div
         className="h-20 px-8 flex items-center justify-between sticky top-0 z-10"
         style={{
@@ -210,13 +213,13 @@ export function ChatView() {
         }}
       >
         <div className="flex items-center gap-3">
-          <h2 className="text-lg font-bold font-serif text-white tracking-wide">{activeDataset.name}</h2>
+          <h2 className="text-lg font-semibold text-white tracking-wide">{activeDataset.name}</h2>
         </div>
         <div className="flex items-center gap-2">
           {onViewDataset && (
             <button
               onClick={onViewDataset}
-              className="inline-flex items-center justify-center rounded-lg border border-white/10 px-3 py-1.5 text-xs font-medium text-slate-300 transition-colors hover:border-white/20 hover:bg-white/5 hover:text-white"
+              className="inline-flex items-center justify-center rounded-lg border border-white/10 px-3 py-1.5 text-xs font-normal text-slate-300 transition-colors hover:border-white/20 hover:bg-white/5 hover:text-white"
             >
               View data
             </button>
@@ -224,7 +227,7 @@ export function ChatView() {
           {onSemanticCorrections && (
             <button
               onClick={onSemanticCorrections}
-              className="inline-flex items-center justify-center rounded-lg border border-white/10 px-3 py-1.5 text-xs font-medium text-slate-300 transition-colors hover:border-white/20 hover:bg-white/5 hover:text-white"
+              className="inline-flex items-center justify-center rounded-lg border border-white/10 px-3 py-1.5 text-xs font-normal text-slate-300 transition-colors hover:border-white/20 hover:bg-white/5 hover:text-white"
             >
               Semantic Corrections
             </button>

@@ -82,7 +82,7 @@ export function PipelineStep({ step }: PipelineStepProps) {
     <div className="flex items-start gap-3">
       {getStatusIcon()}
       <div className="flex-1">
-        <p className={`text-sm font-medium ${getStatusColor()}`}>
+        <p className={`text-sm font-normal ${getStatusColor()}`}>
           {label}
         </p>
         {step.detail && (
