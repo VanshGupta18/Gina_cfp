@@ -102,14 +102,12 @@ export function ConversationProvider({ children }: { children: React.ReactNode }
 
   const setActiveConversation = useCallback(
     (conversationOrId: Conversation | string | null) => {
-      console.log('setActiveConversation called with:', conversationOrId, 'newlyCreatedId:', newlyCreatedConversationId);
       if (conversationOrId === null) {
         setActiveConversationState(null);
         setNewlyCreatedConversationId(null);
       } else if (typeof conversationOrId === 'string') {
         const found = conversations.find((c) => c.id === conversationOrId);
         if (found) {
-          console.log('Found conversation in list:', found);
           setActiveConversationState(found);
           // If navigating to an existing conversation (not newly created), clear the flag
           if (found.id !== newlyCreatedConversationId) {
@@ -118,7 +116,6 @@ export function ConversationProvider({ children }: { children: React.ReactNode }
         } else if (conversationOrId === newlyCreatedConversationId) {
           // This is a newly created conversation that might not be in the list yet
           // Create a temporary placeholder conversation
-          console.log('Conversation not found but matches newlyCreatedId, creating placeholder');
           const placeholder: Conversation = {
             id: conversationOrId,
             datasetId: activeDataset?.id || '',
