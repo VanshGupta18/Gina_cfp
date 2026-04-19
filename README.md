@@ -57,7 +57,7 @@ The repo includes **manifest-based HTTP evals** against a running API (real plan
 
 **Recorded run — `saas-eval-advanced`:** **24 / 24** cases passed. Human-readable summary: [`eval/bundles/saas-eval-advanced/results/result-summary.md`](eval/bundles/saas-eval-advanced/results/result-summary.md); full output: [`eval/bundles/saas-eval-advanced/results/result.json`](eval/bundles/saas-eval-advanced/results/result.json).
 
-**Operational metrics** (latency, intent mix, cache behaviour) come from the `pipeline_runs` table. A sample report and regeneration instructions: [`eval/Operational analytics/analytics.md`](eval/Operational%20analytics/analytics.md). Details: [`eval/README.md`](eval/README.md).
+**Operational metrics** (latency, intent mix, cache behaviour) come from the `pipeline_runs` table. A sample report on actual run and regeneration instructions: [`eval/Operational analytics/analytics.md`](eval/Operational%20analytics/analytics.md). Details: [`eval/README.md`](eval/README.md).
 
 ---
 
