@@ -26,6 +26,15 @@ Open [http://localhost:3000](http://localhost:3000).
 npm run build && npm start
 ```
 
+## Deploying on Vercel (auth)
+
+OAuth uses `window.location.origin` for the callback URL. You must allow that URL in **Supabase → Authentication → URL Configuration**:
+
+- Add **Redirect URLs** for each environment, e.g. `https://<project>.vercel.app/auth/callback`, preview URLs (`https://*.vercel.app/auth/callback` if your Supabase plan supports wildcards), and any custom domain.
+- Set **Site URL** to your primary public URL (production or preview leader), not `http://localhost:3000`, or Supabase may fall back there when a redirect is not allowlisted.
+
+Set `NEXT_PUBLIC_API_BASE_URL` on Vercel to your deployed API origin and ensure backend **CORS** allows the Vercel origin (see `backend` CORS config).
+
 ## Stack notes
 
 This app uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) for font optimization. For Next.js features and deployment, see [Next.js documentation](https://nextjs.org/docs).

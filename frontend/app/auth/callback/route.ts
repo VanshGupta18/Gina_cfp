@@ -2,9 +2,11 @@ import { createServerClient } from '@supabase/ssr';
 import { cookies } from 'next/headers';
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
+import { getSiteOriginFromRequest } from '@/lib/siteUrl';
 
 export async function GET(request: NextRequest) {
-  const { searchParams, origin } = new URL(request.url);
+  const { searchParams } = new URL(request.url);
+  const origin = getSiteOriginFromRequest(request);
   const code = searchParams.get('code');
   // 'next' param is optional — lets us redirect to a specific page after login
   const next = searchParams.get('next') ?? '/app';
