@@ -32,7 +32,7 @@
 
 | ID | Check | Issue |
 |----|--------|--------|
-| **q10** | `table` | `checks.table.pass` is **false**. Row count matched gold (**3** rows). Failure is **cell-level** comparison (numeric tolerance vs expected JSON) or column alias alignment—not row count. Response SQL (truncated in report): `SELECT "plan", AVG("users") … GROUP BY "plan"`. Inspect `checks` in [`result.json`](./result.json) and compare to [`../saas-eval-basic/expected/`](../saas-eval-basic/expected/) (or manifest paths) to adjust gold or tolerances. |
+| **q10** | `table` | `checks.table.pass` is **false**. Row count matched gold (**3** rows). Failure is **cell-level** comparison (numeric tolerance vs expected JSON) or column alias alignment—not row count. Response SQL (truncated in report): `SELECT "plan", AVG("users") … GROUP BY "plan"`. Inspect `checks` in [`result.json`](./result.json) and compare to [`../../saas-eval-basic/expected/`](../../saas-eval-basic/expected/) (or manifest paths) to adjust gold or tolerances. |
 
 ## Case-by-case results
 
