@@ -1,7 +1,5 @@
 # Eval run summary — `saas-eval-advanced`
 
-**Bundle label:** `ecommerce-eval-final`  
-**Manifest:** [`../manifest.json`](../manifest.json)  
 **Run finished:** 2026-04-19T11:04:44.551Z (UTC)
 
 ## Outcome
