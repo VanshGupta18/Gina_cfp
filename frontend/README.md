@@ -33,7 +33,15 @@ OAuth uses `window.location.origin` for the callback URL. You must allow that UR
 - Add **Redirect URLs** for each environment, e.g. `https://<project>.vercel.app/auth/callback`, preview URLs (`https://*.vercel.app/auth/callback` if your Supabase plan supports wildcards), and any custom domain.
 - Set **Site URL** to your primary public URL (production or preview leader), not `http://localhost:3000`, or Supabase may fall back there when a redirect is not allowlisted.
 
-Set `NEXT_PUBLIC_API_BASE_URL` on Vercel to your deployed API origin and ensure backend **CORS** allows the Vercel origin (see `backend` CORS config).
+Set `NEXT_PUBLIC_API_BASE_URL` on Vercel to your deployed API origin (e.g. `https://gina-backend.example.com` — **no trailing slash**).
+
+**CORS (required):** the backend only allows `localhost` dev URLs by default. On the machine where the API runs, set:
+
+`CORS_ORIGINS=https://<your-vercel-app>.vercel.app`
+
+Use the **exact** origin the browser shows (scheme + host; Vercel previews use a different hostname per deployment — add each or comma-separate several). Redeploy/restart the backend after changing env. If `CORS_ORIGINS` is wrong, the browser shows “Failed to fetch” on `GET /api/datasets` because the **OPTIONS** preflight is rejected.
+
+See `backend/.env.example` (`CORS_ORIGINS`) and `backend/src/config/corsOrigins.ts`.
 
 ## Stack notes
 

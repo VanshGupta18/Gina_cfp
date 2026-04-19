@@ -851,6 +851,8 @@ export default async function datasetsRoutes(fastify: FastifyInstance) {
     }
 
     const redactedForDb: SheetIn[] = [];
+    /** Sheets where at least one column was flagged PII (used for clearer 400 if drop leaves no columns). */
+    const sheetHadPiiColumnRemoval = new Set<string>();
     let totalPiiRedactions = 0;
     const allRedactedColumnLabels: string[] = [];
     const piiItems: Array<{ columnKey: string; reason: string; label?: string }> = [];
@@ -860,6 +862,9 @@ export default async function datasetsRoutes(fastify: FastifyInstance) {
       const prefix = s.sheetName === '_' ? '_' : s.sheetName;
       const pii = await runPiiForSheet(s.csv, s.sheetName, prefix);
       redactedForDb.push({ sheetName: s.sheetName, csv: pii.redactedCsv });
+      if (pii.redactedColumns.length > 0) {
+        sheetHadPiiColumnRemoval.add(s.sheetName);
+      }
       totalPiiRedactions += pii.totalRedactions;
       for (const c of pii.redactedColumns) {
         allRedactedColumnLabels.push(prefix === '_' ? c : `${prefix}: ${c}`);
@@ -873,6 +878,12 @@ export default async function datasetsRoutes(fastify: FastifyInstance) {
     for (const s of sheetsIn) {
       const parsedProbe = parseCSV(s.csv);
       if (parsedProbe.headers.length === 0) {
+        if (sheetHadPiiColumnRemoval.has(s.sheetName)) {
+          return reply.status(400).send({
+            error: `Every column in sheet "${s.sheetName}" was flagged as sensitive and removed; nothing remains to analyse.`,
+            hint: 'Upload a CSV that includes at least one non-sensitive column for analysis.',
+          });
+        }
         return reply.status(400).send({
           error: `Sheet "${s.sheetName}" has no headers`,
           hint:

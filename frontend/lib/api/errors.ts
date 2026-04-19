@@ -8,7 +8,9 @@ export function formatApiFailure(
   if (err instanceof TypeError && err.message === 'Failed to fetch') {
     return (
       `Cannot reach the API (${context.method ?? 'GET'} ${context.url}). ` +
-      'Check that the backend is running, NEXT_PUBLIC_API_BASE_URL matches it, and CORS allows this origin.'
+      'Check that the backend is running and NEXT_PUBLIC_API_BASE_URL matches it (no trailing slash). ' +
+      'If the app is on another host (e.g. Vercel), set backend CORS_ORIGINS to your exact frontend origin ' +
+      '(e.g. https://your-app.vercel.app) — localhost is allowed by default, production URLs are not.'
     );
   }
   if (err instanceof Error) {
