@@ -59,11 +59,7 @@ The architecture follows three validated reference patterns:
 │  API (fallback)│ │   resort)    │
 └────────────────┘ └──────────────┘
 └────────────────┘
-          │ fail
-┌─────────▼──────────────┐
-│  Deterministic SQL     │
-│  Templates (zero LLM)  │
-└────────────────────────┘
+
 
                            ┌──────────────┐
                            │  AWS S3      │
@@ -154,7 +150,6 @@ User question
 │  Tier 1: EC2 SQLCoder-8B          timeout: 3s       │
 │  Tier 2: HuggingFace SQLCoder-8B  timeout: 8s       │
 │  Tier 3: Groq Llama 4 Maverick    timeout: 5s       │
-│  Tier 4: Deterministic templates  (zero latency)    │
 │                                                     │
 │  Input: question + full schema for relevant tables  │
 │         only + metric dictionary                    │
@@ -292,7 +287,7 @@ Fastify (Linux server)
    ├─ [if follow_up_cache] pass cached rows to narrator, skip SQL
    │
    ├─ Emit SSE: step "sql_generation" running
-   ├─ Agent 2: EC2 SQLCoder → HF SQLCoder → Groq Maverick → templates
+   ├─ Agent 2: EC2 SQLCoder → HF SQLCoder → Groq Maverick
    ├─ SQL validator: AST parse, SELECT-only assertion, table whitelist
    ├─ Emit SSE: step "sql_generation" complete (or "sql_fallback" warning)
    │
@@ -327,7 +322,6 @@ Browser
 | SQL generation | SQLCoder-8B | EC2 (self-hosted) | Purpose-trained on 20,000+ NL→SQL pairs for PostgreSQL. Domain specialist. The architectural differentiator. |
 | SQL generation fallback 1 | SQLCoder-8B | HuggingFace API | Same model, managed API. Slower on cold start but reliable. |
 | SQL generation fallback 2 | Llama 4 Maverick 17B | Groq | General capable model. SQL quality below SQLCoder but acceptable. |
-| SQL generation fallback 3 | Deterministic templates | None (code) | 5 keyword-matched templates. Zero latency. Always valid SQL. Never fails. |
 | Answer narration (dev) | Llama 4 Maverick 17B | Groq | Reserved Gemini quota for demo day. Same prompt. |
 | Answer narration (demo) | Gemini 2.5 Flash | Google AI Studio | Best language quality. 250 req/day reserved exclusively for demo. |
 | Schema enrichment | Llama 4 Scout 17B | Groq | Infer business labels from column names + samples. One call per upload. |
@@ -363,8 +357,6 @@ dataset_{uuid}           ← Dynamic table per upload (actual CSV data)
 SQLCoder EC2 timeout or invalid SQL
    └─► SQLCoder HuggingFace API
           └─► Groq Llama 4 Maverick (SQL mode)
-                 └─► Deterministic keyword templates
-                        └─► (never reaches here — templates always succeed)
 
 Gemini Flash quota / timeout
    └─► Groq Llama 4 Maverick (narrator)
@@ -419,7 +411,7 @@ If Groq or embedding volume is still high, consider: stronger heuristic-first pa
 Three layers ensure the demo survives any infrastructure failure:
 
 **Layer 1 — Live pipeline with full fallback chain**
-EC2 → HuggingFace → Groq Maverick → deterministic templates. At least one SQL path will always work.
+EC2 → HuggingFace → Groq Maverick
 
 **Layer 2 — Demo snapshot system**
 Pre-computed JSON responses for 6 scripted queries. Activated via `Ctrl+Shift+D`. Pipeline bypassed. Responses render in ~200ms with simulated step trace. Amber `SNAPSHOT MODE` badge shown in UI.

@@ -23,7 +23,7 @@
 
 Spreadsheets hide structure. Dashboards take time to build. SQL excludes most people. Teams still need **fast, accurate answers** from operational CSVs—without a new data engineering project for every question.
 
-**GINA** offers **conversational analytics** with **auditability** (show the SQL), **visible progress** (Server-Sent Events step trace), and **tiered fallbacks** when models disagree (deterministic templates, Groq, Hugging Face).
+**GINA** offers **conversational analytics** with **auditability** (show the SQL), **visible progress** (Server-Sent Events step trace), and **tiered fallbacks** when models disagree (Groq, Hugging Face).
 
 ---
 
@@ -47,7 +47,7 @@ These are **shipped** capabilities judges can run and click through—not a road
 1. **Sign in** — Supabase Auth (OAuth / JWT). The API verifies every request.
 2. **Upload** — A **PII shield** runs in the browser before upload; redacted files go to **S3**; the backend profiles schema and builds semantic context (**pgvector**).
 3. **Ask** — You type a question. The **planner** classifies complexity and routes the pipeline.
-4. **Query pipeline** — **SQL generation** picks an appropriate tier (Groq for planning and narration, Hugging Face for heavier text-to-SQL when needed, **deterministic templates** as a last resort). SQL is **validated** and executed **read-only**.
+4. **Query pipeline** — **SQL generation** picks an appropriate tier (Groq for planning and narration, Hugging Face for heavier text-to-SQL when needed. SQL is **validated** and executed **read-only**.
 5. **Answer** — A **narrator** turns results into prose; the UI shows **charts**, **follow-up suggestions**, and **expandable SQL** (including secondary “verification” SQL when applicable).
 
 Design patterns (TAG-style grounding, collaborating-agent routing, tiered models) are described in [`docs/Architecture.md`](docs/Architecture.md).
@@ -198,7 +198,7 @@ npm run dev        # http://localhost:3000
 4. `event: result` → narrative, chart, SQL, optional secondary SQL, follow-ups.  
 5. [`OutputCard`](frontend/components/output/OutputCard.tsx) + [`SQLExpand`](frontend/components/output/SQLExpand.tsx) for answers and SQL.  
 
-Backend: planner → SQL (templates / Groq / HF) → validate → read-only execute → optional secondary query → narration
+Backend: planner → SQL (Groq / HF) → validate → read-only execute → optional secondary query → narration
 
 ---
 
