@@ -1,6 +1,9 @@
 import type { ColumnProfile } from '../semantic/profiler.js';
 
-/** §6.4 — deterministic templates + semantic-type column binding. */
+/**
+ * §6.4 — deterministic templates + semantic-type column binding.
+ * Not used by the live query pipeline (`generateSql`); kept for tests/seeds and `quotePgIdent` helpers.
+ */
 
 /** Double-quote a PostgreSQL identifier (matches dynamic dataset column names from CSV headers). */
 export function quotePgIdent(name: string): string {

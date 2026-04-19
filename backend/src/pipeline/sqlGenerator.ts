@@ -16,18 +16,31 @@ import { env } from '../config/env.js';
 import { groqPool, hfPool } from '../ratelimit/keyPool.js';
 import { runGroqQueued } from '../ratelimit/queue.js';
 import type { ColumnProfile } from '../semantic/profiler.js';
-import { quotePgIdent, tryTemplateSql } from './sqlTemplates.js';
+import { quotePgIdent } from './sqlTemplates.js';
 import { validateSql } from './sqlValidator.js';
 
-export type SqlGenerationPath = 'hf' | 'groq_maverick' | 'template';
+export type SqlGenerationPath = 'hf' | 'groq_maverick';
 
-/** simple: Maverick → template (no HF). complex: HF → Maverick → template. */
+/** simple: Groq Maverick only. complex: HF → Groq Maverick (no deterministic template fallback). */
 export type SqlTierMode = 'simple' | 'complex';
 
 export type GenerateSqlResult = {
   sql: string;
   path: SqlGenerationPath;
 };
+
+/** Thrown when HF + Groq tiers exhaust without valid SQL (includes provider hints, e.g. rate limits). */
+export class SqlGenerationUnavailableError extends Error {
+  readonly detailHints: string[];
+
+  constructor(summary: string, detailHints: string[] = []) {
+    const combined =
+      detailHints.length > 0 ? `${summary} ${detailHints.join(' | ')}`.slice(0, 8000) : summary;
+    super(combined);
+    this.name = 'SqlGenerationUnavailableError';
+    this.detailHints = detailHints;
+  }
+}
 
 const HF_SQL_TIMEOUT_MS = 8000;
 const GROQ_SQL_TIMEOUT_MS = 5000;
@@ -244,7 +257,7 @@ async function tierHf(prompt: string): Promise<string | null> {
   return null;
 }
 
-async function tierGroqMaverick(prompt: string): Promise<string | null> {
+async function tierGroqMaverick(prompt: string): Promise<{ sql: string | null; errorHint?: string }> {
   const work = runGroqQueued(() => {
     const groq = new Groq({ apiKey: groqPool.next() });
     return groq.chat.completions
@@ -263,18 +276,24 @@ async function tierGroqMaverick(prompt: string): Promise<string | null> {
       .withResponse();
   });
 
-  const completion = await Promise.race([
-    work,
-    new Promise<never>((_, reject) =>
-      setTimeout(() => reject(new Error('groq_sql_timeout')), GROQ_SQL_TIMEOUT_MS),
-    ),
-  ]).catch(() => null);
+  try {
+    const completion = await Promise.race([
+      work,
+      new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('groq_sql_timeout')), GROQ_SQL_TIMEOUT_MS),
+      ),
+    ]);
 
-  if (!completion) return null;
-
-  const text = completion.choices[0]?.message?.content;
-  if (!text) return null;
-  return extractSqlFromLooseText(text);
+    const text = completion.choices[0]?.message?.content;
+    if (!text) {
+      return { sql: null, errorHint: 'Groq SQL model returned empty content' };
+    }
+    return { sql: extractSqlFromLooseText(text) };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    logSqlTier('Groq Maverick SQL tier failed', { message: msg });
+    return { sql: null, errorHint: msg };
+  }
 }
 
 type GenerateSqlParams = {
@@ -286,13 +305,16 @@ type GenerateSqlParams = {
 };
 
 /**
- * One full pass: `simple` → Maverick → templates; `complex` → HF → Maverick → templates.
- * Validates after each tier. Returns null if every tier fails or yields invalid SQL.
+ * One full pass: `simple` → Maverick; `complex` → HF → Maverick. No template tier.
+ * Validates after each tier. Returns null + hints if every tier fails or yields invalid SQL.
  */
-async function tryGenerateSqlOnce(params: GenerateSqlParams): Promise<GenerateSqlResult | null> {
+async function tryGenerateSqlOnce(
+  params: GenerateSqlParams,
+): Promise<{ result: GenerateSqlResult | null; hints: string[] }> {
   const { question, tableName, columns, metricDefinitions = '', sqlTierMode } = params;
   const prompt = buildSqlCoderPrompt({ question, tableName, columns, metricDefinitions });
   const allowedTables = [tableName];
+  const hints: string[] = [];
 
   const tryTier = (sql: string | null, path: SqlGenerationPath): GenerateSqlResult | null => {
     if (!sql) return null;
@@ -315,35 +337,47 @@ async function tryGenerateSqlOnce(params: GenerateSqlParams): Promise<GenerateSq
       }
     }
     const hb = tryTier(hf, 'hf');
-    if (hb) return hb;
+    if (hb) return { result: hb, hints: [] };
+    if (hf) {
+      const vr = validateSql(hf, allowedTables);
+      hints.push(vr.valid ? 'HF: unexpected validation state' : `HF SQL invalid: ${vr.reason}`);
+    } else {
+      hints.push('Hugging Face SQL tier returned no usable SQL');
+    }
   }
 
-  const gq = await tierGroqMaverick(prompt).catch(() => null);
-  const gc = tryTier(gq, 'groq_maverick');
-  if (gc) return gc;
+  const gq = await tierGroqMaverick(prompt);
+  const gc = tryTier(gq.sql, 'groq_maverick');
+  if (gc) return { result: gc, hints: [] };
 
-  const tmpl = tryTemplateSql(question, tableName, columns);
-  const td = tryTier(tmpl, 'template');
-  if (td) return td;
+  if (gq.sql) {
+    const vr = validateSql(gq.sql, allowedTables);
+    hints.push(vr.valid ? 'Groq SQL: validation mismatch' : `Groq SQL invalid: ${vr.reason}`);
+  } else if (gq.errorHint) {
+    hints.push(`Groq SQL model: ${gq.errorHint}`);
+  } else {
+    hints.push('Groq SQL tier returned no output');
+  }
 
-  return null;
+  return { result: null, hints };
 }
 
+const USER_FACING_SQL_FAILURE =
+  'SQL generation failed: models did not return valid SQL, or the service is temporarily unavailable or rate-limited. Please try again in a few minutes.';
+
 /**
- * §6.2 — Planner intent: `simple` → Maverick → templates; `complex` → HF → Maverick → templates.
- * Validates after each tier. Runs the full chain twice before failing.
+ * §6.2 — Planner intent: `simple` → Groq Maverick; `complex` → HF → Groq Maverick.
+ * Validates after each tier. Runs the full chain twice before failing (no template fallback).
  */
 export async function generateSql(params: GenerateSqlParams): Promise<GenerateSqlResult> {
-  let result = await tryGenerateSqlOnce(params);
+  let { result, hints } = await tryGenerateSqlOnce(params);
   if (result) return result;
 
   if (env.SQL_TIER_LOG) {
-    logSqlTier('full fallback chain retry (attempt 2/2)');
+    logSqlTier('SQL tier retry (attempt 2/2)', { hints });
   }
-  result = await tryGenerateSqlOnce(params);
+  ({ result, hints } = await tryGenerateSqlOnce(params));
   if (result) return result;
 
-  throw new Error(
-    'SQL generation failed: all tiers exhausted or produced invalid SQL for this question/schema',
-  );
+  throw new SqlGenerationUnavailableError(USER_FACING_SQL_FAILURE, hints);
 }

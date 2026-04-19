@@ -44,8 +44,14 @@ function validateExpectResult(result, ctx) {
     if (result.rel_tol !== undefined) {
       assert(typeof result.rel_tol === 'number' && result.rel_tol >= 0, `${ctx}: rel_tol must be >= 0`);
     }
+    if (result.compare_as !== undefined) {
+      assert(
+        result.compare_as === 'fraction_as_percent',
+        `${ctx}: compare_as must be fraction_as_percent when set`,
+      );
+    }
     const extra = Object.keys(result).filter(
-      (k) => !['type', 'value', 'abs_tol', 'rel_tol'].includes(k),
+      (k) => !['type', 'value', 'abs_tol', 'rel_tol', 'compare_as'].includes(k),
     );
     assert(extra.length === 0, `${ctx}: unexpected keys on scalar result: ${extra.join(', ')}`);
   } else if (t === 'table') {
@@ -56,8 +62,19 @@ function validateExpectResult(result, ctx) {
     if (result.table_abs_tol !== undefined) {
       assert(typeof result.table_abs_tol === 'number' && result.table_abs_tol >= 0, `${ctx}: table_abs_tol must be >= 0`);
     }
+    if (result.column_aliases !== undefined) {
+      assert(
+        result.column_aliases && typeof result.column_aliases === 'object' && !Array.isArray(result.column_aliases),
+        `${ctx}: column_aliases must be an object`,
+      );
+      for (const [k, v] of Object.entries(result.column_aliases)) {
+        assert(typeof k === 'string' && k.length > 0, `${ctx}: column_aliases keys must be non-empty strings`);
+        assert(Array.isArray(v), `${ctx}: column_aliases.${k} must be an array of strings`);
+        for (const a of v) assert(typeof a === 'string' && a.length > 0, `${ctx}: column_aliases entries must be non-empty strings`);
+      }
+    }
     const extra = Object.keys(result).filter(
-      (k) => !['type', 'path', 'row_order_matters', 'table_abs_tol'].includes(k),
+      (k) => !['type', 'path', 'row_order_matters', 'table_abs_tol', 'column_aliases'].includes(k),
     );
     assert(extra.length === 0, `${ctx}: unexpected keys on table result: ${extra.join(', ')}`);
   } else {

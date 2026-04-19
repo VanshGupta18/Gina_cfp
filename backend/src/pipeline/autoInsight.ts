@@ -223,8 +223,7 @@ export function computeConfidence(
   if (rows.length === 0) score -= 40;
   else if (rows.length < 5) score -= 10;
 
-  if (sqlPath === 'template') score -= 20;
-  else if (sqlPath === 'groq_maverick') score -= 10;
+  if (sqlPath === 'groq_maverick') score -= 10;
 
   if (relevantColumns.length > 0) {
     const avgNullPct =

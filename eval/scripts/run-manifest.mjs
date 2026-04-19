@@ -17,6 +17,9 @@
  *   EVAL_CHECK_RELEVANT_COLUMNS=1 — enforce relevant_columns as subset of planner columns (default: skip)
  *   EVAL_DEFAULT_SCALAR_ABS_TOL — default abs tolerance for numeric scalars when manifest omits abs_tol (default 0.02)
  *   EVAL_DEFAULT_TABLE_ABS_TOL — default for numeric cells in table results (default 0.02)
+ *   EVAL_DEBUG_SQL=1 — longer response SQL snippet in reports when a case fails
+ *   EVAL_DELAY_MS — wait this many milliseconds between cases (default 0). Use e.g. 10000 on free-tier Groq to reduce rate limits.
+ *   EVAL_VERBOSE=0 — disable step-by-step logs to stderr (default: log each phase; JSON report still goes to stdout).
  *
  * Flags:
  *   --dataset-id=<uuid>   Override EVAL_DATASET_ID
@@ -36,12 +39,46 @@ import {
 
 const token = process.env.TEST_JWT ?? process.env.EVAL_JWT;
 
+/** Step logs to stderr so stdout stays clean for `> report.json`. */
+function evalVerbose() {
+  return process.env.EVAL_VERBOSE !== '0' && process.env.EVAL_VERBOSE !== 'false';
+}
+
+function log(step, detail = null) {
+  if (!evalVerbose()) return;
+  if (detail != null && detail !== '') {
+    console.error(`eval/run-manifest [${step}]`, detail);
+  } else {
+    console.error(`eval/run-manifest [${step}]`);
+  }
+}
+
+function envTruthy(name) {
+  const v = process.env[name];
+  if (v == null || v === '') return false;
+  return ['1', 'true', 'yes', 'on'].includes(String(v).toLowerCase());
+}
+
+/** Milliseconds to sleep between cases (0 = no delay). Env: EVAL_DELAY_MS */
+function parseEvalDelayMs() {
+  const raw = process.env.EVAL_DELAY_MS;
+  if (raw == null || String(raw).trim() === '') return 0;
+  const n = Number(String(raw).trim());
+  if (!Number.isFinite(n) || n < 0) return 0;
+  return Math.floor(n);
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 function parseArgs(argv) {
   const out = {
     manifestPath: null,
     datasetId: process.env.EVAL_DATASET_ID ?? null,
     baseUrl: process.env.BASE_URL ?? 'http://127.0.0.1:3001',
     checkSql: false,
+    debugSql: envTruthy('EVAL_DEBUG_SQL'),
   };
   for (const a of argv) {
     if (a === '--check-sql') out.checkSql = true;
@@ -125,27 +162,76 @@ function hasErrorEvent(events) {
   return events.some((e) => e.event === 'error');
 }
 
-/** First numeric-looking scalar from API result payload (big_number, or first row cell). */
+/** Parse a number from mixed strings: "12.3%", "£1,234.50", "1,000". */
+function parseNumberFromString(s) {
+  if (s == null) return null;
+  const str = String(s).trim();
+  if (!str) return null;
+  const pct = str.match(/(-?[\d,.]+)\s*%/);
+  if (pct) {
+    const n = parseFloat(pct[1].replace(/,/g, ''));
+    return Number.isNaN(n) ? null : n;
+  }
+  const stripped = str.replace(/[£$€\s]/g, '');
+  const numMatch = stripped.match(/-?[\d,]+(?:\.\d+)?/);
+  if (numMatch) {
+    const n = parseFloat(numMatch[0].replace(/,/g, ''));
+    return Number.isNaN(n) ? null : n;
+  }
+  return null;
+}
+
+function parseNumberFromCell(raw) {
+  if (raw == null || raw === '') return null;
+  if (typeof raw === 'number' && !Number.isNaN(raw)) return raw;
+  return parseNumberFromString(String(raw));
+}
+
+/**
+ * First numeric scalar from API result: big_number value, keyFigure, single-point charts, then resultTable
+ * (preferring column names that look like aggregates).
+ */
 function extractScalarFromPayload(payload) {
   if (!payload || typeof payload !== 'object') return null;
   const ct = payload.chartType;
   const cd = payload.chartData;
-  if (ct === 'big_number' && cd && typeof cd === 'object' && 'value' in cd) {
-    const v = cd.value;
+
+  if (ct === 'big_number' && cd && typeof cd === 'object' && 'value' in cd && !('datasets' in cd)) {
+    const v = /** @type {{ value: number }} */ (cd).value;
     if (typeof v === 'number' && !Number.isNaN(v)) return v;
   }
+
+  const kf = payload.keyFigure;
+  const fromKf = parseNumberFromCell(kf);
+  if (fromKf != null) return fromKf;
+
+  if (cd && typeof cd === 'object' && 'datasets' in cd && Array.isArray(cd.datasets)) {
+    const ds = cd.datasets;
+    if (ds.length === 1 && Array.isArray(ds[0]?.data) && ds[0].data.length === 1) {
+      const n = ds[0].data[0];
+      if (typeof n === 'number' && !Number.isNaN(n)) return n;
+    }
+  }
+
   const rt = payload.resultTable;
   if (rt && Array.isArray(rt.rows) && rt.rows.length > 0) {
     const row = rt.rows[0];
     if (row && typeof row === 'object') {
-      for (const k of Object.keys(row)) {
-        const raw = row[k];
-        if (raw === '' || raw == null) continue;
-        const n = typeof raw === 'number' ? raw : parseFloat(String(raw).replace(/[£,]/g, ''));
-        if (!Number.isNaN(n)) return n;
+      const keys = Object.keys(row);
+      const prefer = /(count|total|sum|avg|mean|revenue|qty|quantity|amount|value|pct|percent)/i;
+      for (const k of keys) {
+        if (prefer.test(k)) {
+          const n = parseNumberFromCell(row[k]);
+          if (n != null) return n;
+        }
+      }
+      for (const k of keys) {
+        const n = parseNumberFromCell(row[k]);
+        if (n != null) return n;
       }
     }
   }
+
   return null;
 }
 
@@ -166,12 +252,13 @@ function rowsFromResultTable(payload) {
 /**
  * Multiset match: each expected row must pair with a distinct actual row that matches on expected keys.
  * When orderMatters, compare row-by-row index (still only expected keys must match).
+ * @param {{ columnAliases?: Record<string, string[]> }} [rowOpts] passed to rowMatchesExpected (alias resolution).
  */
-function tableEquivalent(actualRows, expectedRows, orderMatters, tableAbsTol) {
+function tableEquivalent(actualRows, expectedRows, orderMatters, tableAbsTol, rowOpts = {}) {
   if (orderMatters) {
     if (actualRows.length !== expectedRows.length) return false;
     for (let i = 0; i < expectedRows.length; i++) {
-      if (!rowMatchesExpected(actualRows[i], expectedRows[i], tableAbsTol)) return false;
+      if (!rowMatchesExpected(actualRows[i], expectedRows[i], tableAbsTol, rowOpts)) return false;
     }
     return true;
   }
@@ -181,7 +268,7 @@ function tableEquivalent(actualRows, expectedRows, orderMatters, tableAbsTol) {
     let found = -1;
     for (let i = 0; i < actualRows.length; i++) {
       if (used.has(i)) continue;
-      if (rowMatchesExpected(actualRows[i], er, tableAbsTol)) {
+      if (rowMatchesExpected(actualRows[i], er, tableAbsTol, rowOpts)) {
         found = i;
         break;
       }
@@ -306,6 +393,16 @@ async function main() {
   }
   if (!token) fail('Set TEST_JWT or EVAL_JWT');
 
+  log('start', {
+    manifestPath,
+    baseUrl: args.baseUrl,
+    checkSql: args.checkSql,
+    debugSql: args.debugSql,
+    checkIntentSql,
+    checkRelevantColumns,
+    jwt: 'set',
+  });
+
   const manifestRaw = readFileSync(manifestPath, 'utf8');
   /** @type {any} */
   let manifest;
@@ -316,21 +413,31 @@ async function main() {
   }
   if (manifest.version !== '1' || !Array.isArray(manifest.cases)) fail('manifest must be version 1 with cases[]');
 
+  log('manifest_parsed', {
+    bundle: manifest.name ?? '(no name)',
+    version: manifest.version,
+    cases: manifest.cases.length,
+  });
+
   const manifestDir = dirname(manifestPath);
   const base = args.baseUrl.replace(/\/$/, '');
   const authHeader = `Bearer ${token}`;
 
+  log('health', `GET ${base}/health`);
   const health = await fetch(`${base}/health`);
   if (!health.ok) fail(`/health ${health.status}`);
+  log('health_ok', health.status);
 
+  log('users_sync', 'POST /api/users/sync');
   await ensureUser(base, authHeader);
+  log('users_sync_ok');
 
   const rawDatasetId = args.datasetId ? String(args.datasetId).trim() : '';
   let datasetId = rawDatasetId ? normalizeEvalDatasetId(rawDatasetId) : null;
   if (rawDatasetId && /^dataset_[0-9a-f]{32}$/i.test(rawDatasetId)) {
-    console.error(`eval/run-manifest: resolved table name ${rawDatasetId} to dataset id ${datasetId}`);
+    log('dataset_id_normalized', { from: rawDatasetId, to: datasetId });
   } else if (rawDatasetId && /^[0-9a-f]{32}$/i.test(rawDatasetId) && !rawDatasetId.includes('-')) {
-    console.error(`eval/run-manifest: added hyphens to dataset id ${datasetId}`);
+    log('dataset_id_normalized', { from: rawDatasetId, to: datasetId });
   }
   const csvResolved = pickCsvPath(manifest, manifestDir);
 
@@ -340,19 +447,47 @@ async function main() {
         'No EVAL_DATASET_ID / --dataset-id and no case with data.csv_path pointing to a readable file. Provide a dataset or a fixture CSV.',
       );
     }
+    log('dataset_upload', { csvPath: csvResolved });
     const filename = `eval_${basename(csvResolved)}`;
     datasetId = await uploadCsv(base, authHeader, csvResolved, filename);
+    log('dataset_upload_ok', { datasetId });
+  } else {
+    log('dataset_reuse', { datasetId, source: 'EVAL_DATASET_ID or --dataset-id' });
   }
 
+  log('semantic', `GET /api/datasets/${datasetId}/semantic`);
   const { tableName } = await fetchSemantic(base, authHeader, datasetId);
+  log('semantic_ok', { tableName });
+
+  /** One conversation for all cases; each POST still sends empty sessionContext (no cross-case chat leakage). */
+  log('conversation_create', `POST /api/datasets/${datasetId}/conversations`);
   const conversationId = await createConversation(base, authHeader, datasetId);
+  log('conversation_ok', { conversationId });
+
+  const caseDelayMs = parseEvalDelayMs();
+  if (caseDelayMs > 0) {
+    log('delay_between_cases', `${caseDelayMs}ms (EVAL_DELAY_MS)`);
+  }
 
   /** @type {any[]} */
   const caseReports = [];
   let failures = 0;
 
-  for (const c of manifest.cases) {
+  const cases = manifest.cases;
+  for (let caseIndex = 0; caseIndex < cases.length; caseIndex++) {
+    if (caseIndex > 0 && caseDelayMs > 0) {
+      log('case_sleep', { before: cases[caseIndex]?.id, ms: caseDelayMs });
+      await sleep(caseDelayMs);
+    }
+    const c = cases[caseIndex];
     const id = c.id;
+    log('case_start', {
+      index: caseIndex + 1,
+      total: cases.length,
+      id,
+      questionPreview: String(c.question ?? '').slice(0, 120),
+    });
+
     const placeholder =
       (c.data?.table_placeholder && String(c.data.table_placeholder)) || 'dataset_<FIXTURE_TABLE>';
     const goldSubstituted =
@@ -362,8 +497,11 @@ async function main() {
 
     let sseText;
     try {
+      log('case_query', { id, path: 'POST /api/query (SSE)' });
       sseText = await runQuery(base, authHeader, conversationId, datasetId, c.question);
+      log('case_query_done', { id, sseBytes: sseText?.length ?? 0 });
     } catch (e) {
+      log('case_query_error', { id, error: String(e?.message ?? e) });
       failures++;
       caseReports.push({
         id,
@@ -374,7 +512,13 @@ async function main() {
     }
 
     const events = parseSseEvents(sseText);
+    const stepEvents = events.filter((e) => e.event === 'step').length;
+    const resultEvents = events.filter((e) => e.event === 'result').length;
+    const errorEvents = events.filter((e) => e.event === 'error').length;
+    log('case_sse_parsed', { id, totalEvents: events.length, stepEvents, resultEvents, errorEvents });
+
     if (hasErrorEvent(events)) {
+      log('case_sse_error_event', { id, tail: sseText.slice(-400) });
       failures++;
       caseReports.push({
         id,
@@ -387,6 +531,14 @@ async function main() {
 
     const planner = lastPlannerComplete(events);
     const payload = lastResultPayload(events);
+    log('case_payload', {
+      id,
+      hasPlanner: !!planner,
+      plannerIntent: planner?.intent ?? null,
+      hasResultPayload: !!payload,
+      cacheHit: payload?.cacheHit ?? null,
+    });
+
     const expect = c.expect;
 
     /** @type {Record<string, unknown>} */
@@ -394,6 +546,7 @@ async function main() {
     let ok = true;
 
     if (expect.intent === 'conversational') {
+      log('case_score', { id, branch: 'conversational' });
       if (!planner) {
         checks.intent = { pass: false, note: 'no planner complete step (cache path?)', expected: expect.intent };
         ok = false;
@@ -412,7 +565,9 @@ async function main() {
         checks.narrative_contains = subs;
         if (subs.some((x) => !x.pass)) ok = false;
       }
+      log('case_checks_conversational', { id, ok, intent: checks.intent });
     } else {
+      log('case_score', { id, branch: 'sql', expectResultType: expect.result?.type ?? null });
       if (!planner) {
         checks.intent = { pass: false, note: 'no planner complete (response cache skipped planner?)', expected: expect.intent };
         ok = false;
@@ -482,11 +637,16 @@ async function main() {
         } else {
           const expectedRows = JSON.parse(readFileSync(expPath, 'utf8'));
           const actualRows = rowsFromResultTable(payload);
+          const columnAliases =
+            expect.result.column_aliases && typeof expect.result.column_aliases === 'object'
+              ? expect.result.column_aliases
+              : {};
           const pass = tableEquivalent(
             actualRows,
             expectedRows,
             expect.result.row_order_matters === true,
             tableTol,
+            { columnAliases },
           );
           checks.table = {
             pass,
@@ -497,9 +657,26 @@ async function main() {
           if (!pass) ok = false;
         }
       }
+      log('case_checks_sql', {
+        id,
+        ok,
+        intent: checks.intent,
+        relevant_columns: checks.relevant_columns,
+        sql_jaccard: checks.sql_jaccard,
+        scalar: checks.scalar,
+        table: checks.table,
+      });
+    }
+
+    if (!ok && payload?.sql && typeof payload.sql === 'string') {
+      const maxLen = args.debugSql ? 12000 : 4000;
+      let sqlText = payload.sql;
+      if (sqlText.length > maxLen) sqlText = `${sqlText.slice(0, maxLen)}\n…[truncated]`;
+      checks.responseSql = sqlText;
     }
 
     if (!ok) failures++;
+    log('case_end', { id, ok, failedSoFar: failures });
     caseReports.push({
       id,
       ok,
@@ -508,6 +685,12 @@ async function main() {
       narrativePreview: payload?.narrative ? String(payload.narrative).slice(0, 200) : null,
     });
   }
+
+  log('report_build', {
+    total: manifest.cases.length,
+    failed: failures,
+    passed: failures === 0,
+  });
 
   const report = {
     bundle: manifest.name,
@@ -519,6 +702,8 @@ async function main() {
     evalConfig: {
       checkIntentForSql: checkIntentSql,
       checkRelevantColumns,
+      debugSql: args.debugSql,
+      caseDelayMs,
     },
     passed: failures === 0,
     summary: { total: manifest.cases.length, failed: failures },
@@ -526,7 +711,9 @@ async function main() {
     ranAt: new Date().toISOString(),
   };
 
+  log('stdout_json', 'writing full report to stdout');
   console.log(JSON.stringify(report, null, 2));
+  log('exit', { code: failures > 0 ? 1 : 0 });
   process.exit(failures > 0 ? 1 : 0);
 }
 

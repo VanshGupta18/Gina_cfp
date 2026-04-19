@@ -45,6 +45,22 @@ Design patterns (TAG-style grounding, collaborating-agent routing, tiered models
 
 ---
 
+## Evaluation and accuracy
+
+The repo includes **manifest-based HTTP evals** against a running API (real planner, SQL, and results):
+
+| Script (from repo root) | Purpose |
+|---------------------------|---------|
+| `npm run eval:validate-manifest -- eval/bundles/<name>/manifest.json` | Validate `manifest.json` against the JSON Schema |
+| `npm run eval:run-manifest -- eval/bundles/<name>/manifest.json` | Run all cases; prints a JSON report to stdout (exit `0` if all pass) |
+| `npm run eval:test-helpers` | Unit tests for numeric/table/scorer helpers |
+
+**Recorded run — `saas-eval-advanced`:** **24 / 24** cases passed. Human-readable summary: [`eval/bundles/saas-eval-advanced/results/result-summary.md`](eval/bundles/saas-eval-advanced/results/result-summary.md); full output: [`eval/bundles/saas-eval-advanced/results/result.json`](eval/bundles/saas-eval-advanced/results/result.json).
+
+**Operational metrics** (latency, intent mix, cache behaviour) come from the `pipeline_runs` table. A sample report and regeneration instructions: [`eval/Operational analytics/analytics.md`](eval/Operational%20analytics/analytics.md). Details: [`eval/README.md`](eval/README.md).
+
+---
+
 ## Technology stack
 
 | Layer | Choices |
@@ -65,6 +81,7 @@ Full dependency lists: [`backend/package.json`](backend/package.json), [`fronten
 |------|------|
 | `frontend/` | Next.js UI, auth, upload, chat, SSE client for `/api/query` |
 | `backend/` | Fastify API, query pipeline, migrations, seeds, snapshots |
+| `eval/` | Eval bundles (`manifest.json`, CSV, gold JSON), `run-manifest` / `validate-manifest`, scorer tests, operational analytics docs and SQL |
 | `docs/` | Architecture, API contracts, audits, route coverage notes |
 
 ---
@@ -132,3 +149,6 @@ Backend: planner → SQL (templates / Groq / HF) → validate → read-only exec
 | Document | Contents |
 |----------|----------|
 | [`docs/Architecture.md`](docs/Architecture.md) | Topology, patterns, layers |
+| [`eval/README.md`](eval/README.md) | Eval bundles, env flags, caches, NPM scripts |
+| [`eval/bundles/saas-eval-advanced/results/result-summary.md`](eval/bundles/saas-eval-advanced/results/result-summary.md) | Latest recorded accuracy run (24-case bundle) |
+| [`eval/Operational analytics/analytics.md`](eval/Operational%20analytics/analytics.md) | Sample `pipeline_runs` metrics (latency, intent mix) |

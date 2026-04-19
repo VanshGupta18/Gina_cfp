@@ -100,7 +100,12 @@
               ]
             },
             "abs_tol": { "type": "number", "minimum": 0 },
-            "rel_tol": { "type": "number", "minimum": 0 }
+            "rel_tol": { "type": "number", "minimum": 0 },
+            "compare_as": {
+              "type": "string",
+              "enum": ["fraction_as_percent"],
+              "description": "If set, treat model values in 0–1 as fractions when gold value is percent on 0–100 scale (e.g. 0.12 vs 12)"
+            }
           }
         },
         {
@@ -121,6 +126,14 @@
               "type": "number",
               "minimum": 0,
               "description": "Numeric cell tolerance for table comparison (overrides EVAL_DEFAULT_TABLE_ABS_TOL)"
+            },
+            "column_aliases": {
+              "type": "object",
+              "description": "Maps gold JSON column names to alternative keys in API resultTable (tried after built-in aggregate synonyms)",
+              "additionalProperties": {
+                "type": "array",
+                "items": { "type": "string", "minLength": 1 }
+              }
             }
           }
         },

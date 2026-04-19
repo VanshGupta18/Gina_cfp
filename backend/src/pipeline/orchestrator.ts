@@ -13,7 +13,12 @@ import {
   incrementResponseCacheHits,
   storeResponseCache,
 } from '../cache/responseCache.js';
-import { generateSql, type GenerateSqlResult, type SqlGenerationPath } from './sqlGenerator.js';
+import {
+  generateSql,
+  SqlGenerationUnavailableError,
+  type GenerateSqlResult,
+  type SqlGenerationPath,
+} from './sqlGenerator.js';
 import { runPlanner, type PlannerOutput } from './planner.js';
 import { applyPlannerGroundingGuard, buildGroundingFallbackReply } from './plannerGroundingGuard.js';
 import { validateSql } from './sqlValidator.js';
@@ -655,9 +660,17 @@ export async function runQueryOrchestration(input: QueryOrchestrationInput): Pro
         sqlTierMode: plan.intent === 'complex_query' ? 'complex' : 'simple',
       });
     } catch (e) {
-      fastify.log.warn({ err: e }, 'generateSql failed; conversational fallback');
+      fastify.log.warn({ err: e }, 'generateSql failed');
       tel.sqlValid = false;
-      await deliverConversationalAnswer(buildGroundingFallbackReply(understandingCard), plan);
+      const msg =
+        e instanceof SqlGenerationUnavailableError
+          ? e.message
+          : e instanceof Error
+            ? e.message
+            : 'SQL generation failed';
+      await sendError(reply, msg, true);
+      reply.sse.close();
+      await flushTelemetry();
       return;
     }
     tel.latencySqlMs = Date.now() - tSqlStart;
@@ -762,15 +775,16 @@ export async function runQueryOrchestration(input: QueryOrchestrationInput): Pro
     let narrationCacheHit = false;
 
     const tNarrStart = Date.now();
+    const skipNarrationCache = env.DISABLE_NARRATION_CACHE;
     if (!secondaryResult.fired) {
-      const cachedNarr = await getNarrationCache(fastify.db, narrCacheKey);
+      const cachedNarr = skipNarrationCache ? null : await getNarrationCache(fastify.db, narrCacheKey);
       if (cachedNarr != null) {
         narrative = cachedNarr;
         narrationCacheHit = true;
       } else if (rows.length === 0) {
         narrative =
           'No rows matched your question. Try broadening your filters or rephrasing the question.';
-        await storeNarrationCache(fastify.db, narrCacheKey, narrative);
+        if (!skipNarrationCache) await storeNarrationCache(fastify.db, narrCacheKey, narrative);
       } else {
         narrative = await generateNarration({
           question,
@@ -779,7 +793,7 @@ export async function runQueryOrchestration(input: QueryOrchestrationInput): Pro
           secondaryRows: undefined,
           autoInsights,
         });
-        await storeNarrationCache(fastify.db, narrCacheKey, narrative);
+        if (!skipNarrationCache) await storeNarrationCache(fastify.db, narrCacheKey, narrative);
       }
     } else if (rows.length === 0) {
       narrative =

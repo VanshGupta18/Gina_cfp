@@ -285,7 +285,8 @@
           "gold_sql": "SELECT ROUND((COUNT(*) FILTER (WHERE is_returned = true) * 100.0 / COUNT(*))::numeric, 2) AS return_rate FROM dataset_<FIXTURE_TABLE>",
           "result": {
             "type": "scalar",
-            "value": 12.00
+            "value": 12.00,
+            "compare_as": "fraction_as_percent"
           }
         }
       },

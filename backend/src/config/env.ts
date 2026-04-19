@@ -56,9 +56,14 @@ const envSchema = z.object({
 
   /**
    * When true, skip `response_cache` lookup so identical questions re-run the full pipeline.
-   * Useful for eval reruns and debugging. Does not disable narration_cache after SQL runs.
+   * Useful for eval reruns and debugging.
    */
   DISABLE_RESPONSE_CACHE: boolFromEnv,
+  /**
+   * When true, skip `narration_cache` read/write so identical result shapes still get fresh narration.
+   * Pair with DISABLE_RESPONSE_CACHE for fully cold eval runs.
+   */
+  DISABLE_NARRATION_CACHE: boolFromEnv,
   /** When true, skip Groq PII agent and use heuristic fallback only. */
   PII_AGENT_DISABLED: boolFromEnv,
   /** Max time for one PII agent Groq call (ms). */
