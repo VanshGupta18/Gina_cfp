@@ -26,10 +26,12 @@ export default async function queryRoutes(fastify: FastifyInstance) {
     async (request, reply) => {
       const parsed = queryBodySchema.safeParse(request.body);
       if (!parsed.success) {
-        return reply.status(400).send({
-          error: 'Invalid body',
-          details: parsed.error.flatten(),
-        });
+        // SSE-wrapped routes: `reply.send(object)` throws FST_ERR_REP_INVALID_PAYLOAD_TYPE
+        // until the stream sends; use a JSON string for early errors.
+        return reply
+          .code(400)
+          .type('application/json; charset=utf-8')
+          .send(JSON.stringify({ error: 'Invalid body', details: parsed.error.flatten() }));
       }
 
       const { conversationId, datasetId, question } = parsed.data;
@@ -45,7 +47,10 @@ export default async function queryRoutes(fastify: FastifyInstance) {
       );
 
       if (conv.rowCount === 0) {
-        return reply.status(404).send({ error: 'Conversation not found for this dataset' });
+        return reply
+          .code(404)
+          .type('application/json; charset=utf-8')
+          .send(JSON.stringify({ error: 'Conversation not found for this dataset' }));
       }
 
       await runQueryOrchestration({
