@@ -57,7 +57,7 @@ The API caches answers by **dataset id + question text** (`response_cache`). Aft
 
 **Options:**
 
-1. **Dev backend:** set `**DISABLE_RESPONSE_CACHE=true`** and optionally `**DISABLE_NARRATION_CACHE=true**` in `[backend/.env](../../backend/.env)` and restart. See `[backend/.env.example](../../backend/.env.example)`.
+1. **Dev backend:** set `**DISABLE_RESPONSE_CACHE=true`** and optionally `**DISABLE_NARRATION_CACHE=true**` in `[backend/.env](../../backend/.env)` and restart. See `[backend/.env.example](../../backend/.env.example)`. To skip per-query **schema RAG** (HF question embedding + pgvector ranking), set `**DISABLE_SCHEMA_RETRIEVAL=true**` (useful for lean eval runs).
 2. **SQL:** run `[sql/clear_eval_caches.sql](sql/clear_eval_caches.sql)` (or `DELETE FROM response_cache;` only) in Supabase; TTL is **24h** otherwise.
 3. **New dataset:** upload the CSV again so you get a new `dataset_id` and empty cache keys.
 

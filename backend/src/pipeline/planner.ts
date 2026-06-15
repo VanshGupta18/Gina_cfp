@@ -73,7 +73,7 @@ Rules:
 - For relative time phrases ("last year", "YTD", "recent", "this quarter") or trend questions, include all date columns needed to filter or group when present in the schema.
 - relevantTables: include only the physical dataset table name when using SQL intents (e.g. dataset_xxx). If unsure, list that table. For conversational intent, use [].
 
-Schema columns:
+Schema columns (JSON array). When present, the first entries are ranked by embedding similarity to the user's question; the list is still complete—every column the dataset has appears exactly once.
 ${JSON.stringify(input.columns, null, 2)}
 
 Dataset summary (understanding card):

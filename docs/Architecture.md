@@ -279,8 +279,13 @@ Fastify (Linux server)
    ├─ Check response_cache (hash: SHA256(question + datasetId))
    │     └─ Cache HIT → skip to narrator → emit result
    │
+   ├─ Emit SSE: step "schema_retrieval" running (unless DISABLE_SCHEMA_RETRIEVAL)
+   ├─ HF embedding(question) + pgvector: rank schema_embeddings → reorder full ColumnProfile list
+   │     (RAG-ranked columns first; same columns as semantic_state — none dropped)
+   ├─ Emit SSE: step "schema_retrieval" complete (or warning → original order)
+   │
    ├─ Emit SSE: step "planner" running
-   ├─ Groq Llama 4 Scout: classify intent + retrieve relevant columns/tables
+   ├─ Groq Llama 4 Scout: classify intent + pick relevant columns/tables from ordered schema JSON
    ├─ Emit SSE: step "planner" complete
    │
    ├─ [if conversational] respond directly, done

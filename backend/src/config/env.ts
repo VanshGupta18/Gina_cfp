@@ -64,6 +64,12 @@ const envSchema = z.object({
    * Pair with DISABLE_RESPONSE_CACHE for fully cold eval runs.
    */
   DISABLE_NARRATION_CACHE: boolFromEnv,
+  /**
+   * When true, skip question→column pgvector retrieval; planner/SQL see columns in semantic_state order only.
+   */
+  DISABLE_SCHEMA_RETRIEVAL: boolFromEnv,
+  /** Max columns returned from `schema_embeddings` similarity search before merging into full schema order. */
+  SCHEMA_RETRIEVAL_TOP_K: z.coerce.number().int().positive().max(64).default(16),
   /** When true, skip Groq PII agent and use heuristic fallback only. */
   PII_AGENT_DISABLED: boolFromEnv,
   /** Max time for one PII agent Groq call (ms). */

@@ -4,6 +4,7 @@ import { PipelineStep as PipelineStepType } from '@/types';
 
 // Map backend orchestrator `step` field → UI labels (see backend sendStep in orchestrator.ts)
 const STEP_LABELS: Record<string, string> = {
+  schema_retrieval: 'Ranking columns for your question',
   planner: 'Understanding your question',
   cache_hit: 'Answer from cache',
   sql_generation: 'Generating SQL',

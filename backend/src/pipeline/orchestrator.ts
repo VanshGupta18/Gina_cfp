@@ -40,6 +40,8 @@ import {
 } from '../snapshots/snapshotStore.js';
 import { logPipelineRun, type PipelineRunInput } from '../telemetry/pipelineLogger.js';
 import { env } from '../config/env.js';
+import { retrieveRelevantColumns } from '../semantic/retriever.js';
+import { orderColumnProfilesByRetrieval } from '../semantic/orderColumnsByRetrieval.js';
 
 export type { QueryResultPayload };
 
@@ -447,12 +449,54 @@ export async function runQueryOrchestration(input: QueryOrchestrationInput): Pro
     columns?: ColumnProfile[];
     understandingCard?: string;
   };
-  const columns = schema.columns ?? [];
+  const schemaColumns = schema.columns ?? [];
   const tableName = row.data_table_name;
   const understandingCard =
     schema.understandingCard ?? row.understanding_card ?? undefined;
 
-  const plannerColumns = columns.map((c) => ({
+  /** Full column multiset; RAG reorders so question-similar columns appear first for planner + SQL prompts. */
+  let pipelineColumns: ColumnProfile[] = schemaColumns;
+
+  if (!env.DISABLE_SCHEMA_RETRIEVAL && schemaColumns.length > 0) {
+    await sendStep(reply, {
+      step: 'schema_retrieval',
+      status: 'running',
+      detail: 'Matching your question to relevant columns…',
+    });
+    try {
+      const retrieved = await retrieveRelevantColumns(fastify.db, {
+        datasetId,
+        question,
+        topK: env.SCHEMA_RETRIEVAL_TOP_K,
+      });
+      if (retrieved.length > 0) {
+        pipelineColumns = orderColumnProfilesByRetrieval(schemaColumns, retrieved);
+        await sendStep(reply, {
+          step: 'schema_retrieval',
+          status: 'complete',
+          detail: `Ranked ${retrieved.length} column${retrieved.length === 1 ? '' : 's'} by similarity to your question`,
+        });
+      } else {
+        await sendStep(reply, {
+          step: 'schema_retrieval',
+          status: 'complete',
+          detail: 'No indexed columns to rank — using saved schema order',
+        });
+      }
+    } catch (err) {
+      fastify.log.warn({ err }, 'schema retrieval failed; using saved schema order');
+      pipelineColumns = schemaColumns;
+      const hint =
+        err instanceof Error ? err.message.slice(0, 140) : 'unknown error';
+      await sendStep(reply, {
+        step: 'schema_retrieval',
+        status: 'warning',
+        detail: `Column similarity ranking skipped (${hint})`,
+      });
+    }
+  }
+
+  const plannerColumns = pipelineColumns.map((c) => ({
     columnName: c.columnName,
     businessLabel: c.businessLabel,
     semanticType: c.semanticType,
@@ -474,7 +518,7 @@ export async function runQueryOrchestration(input: QueryOrchestrationInput): Pro
         question,
         narrative: text,
         understandingCard: understandingCard ?? '',
-        columns,
+        columns: pipelineColumns,
         relevantColumns: [],
         intent: 'conversational',
         rowCount: 0,
@@ -541,12 +585,12 @@ export async function runQueryOrchestration(input: QueryOrchestrationInput): Pro
     });
     tel.latencyPlannerMs = Date.now() - tPlannerStart;
 
-    const allowedNames = new Set(columns.map((c) => c.columnName));
+    const allowedNames = new Set(schemaColumns.map((c) => c.columnName));
     const grounding = applyPlannerGroundingGuard(plan, {
       tableName,
       allowedColumnNames: allowedNames,
       understandingCard,
-      columnProfiles: columns,
+      columnProfiles: schemaColumns,
     });
     plan = grounding.plan;
 
@@ -587,7 +631,7 @@ export async function runQueryOrchestration(input: QueryOrchestrationInput): Pro
         question,
         narrative: cacheText,
         understandingCard: understandingCard ?? '',
-        columns,
+        columns: pipelineColumns,
         relevantColumns: plan.relevantColumns,
         intent: plan.intent,
         rowCount: 0,
@@ -655,7 +699,7 @@ export async function runQueryOrchestration(input: QueryOrchestrationInput): Pro
       gen = await generateSql({
         question,
         tableName,
-        columns,
+        columns: pipelineColumns,
         metricDefinitions: '',
         sqlTierMode: plan.intent === 'complex_query' ? 'complex' : 'simple',
       });
@@ -728,7 +772,7 @@ export async function runQueryOrchestration(input: QueryOrchestrationInput): Pro
     tel.latencyDbMs = Date.now() - tDbStart;
     const rows = exec.rows;
     tel.rowsReturned = rows.length;
-    const resultTable = buildResultTable(rows, columns, plan.relevantColumns);
+    const resultTable = buildResultTable(rows, pipelineColumns, plan.relevantColumns);
 
     await sendStep(reply, {
       step: 'db_execution',
@@ -743,7 +787,7 @@ export async function runQueryOrchestration(input: QueryOrchestrationInput): Pro
       pool: fastify.db,
       question,
       tableName,
-      columns,
+      columns: pipelineColumns,
       primaryRows: rows,
     });
 
@@ -758,13 +802,13 @@ export async function runQueryOrchestration(input: QueryOrchestrationInput): Pro
     }
 
     // ── Person A: auto insights + confidence (§6.7 / §6.8) ──
-    const autoInsights = detectAutoInsights(rows, columns);
-    const confidenceScore = computeConfidence(rows, gen.path, columns);
+    const autoInsights = detectAutoInsights(rows, pipelineColumns);
+    const confidenceScore = computeConfidence(rows, gen.path, pipelineColumns);
     tel.confidenceScore = confidenceScore;
 
     // ── Person A: chart type (§9) ──
     const chartType = selectChartType(rows, plan.intent, question);
-    const keyFigure = extractKeyFigure(rows, columns);
+    const keyFigure = extractKeyFigure(rows, pipelineColumns);
 
     const shapeFp = resultShapeFingerprint(rows, gen.sql);
     const narrCacheKey = narrationCacheKey(plan.intent, shapeFp);
@@ -817,7 +861,7 @@ export async function runQueryOrchestration(input: QueryOrchestrationInput): Pro
       question,
       narrative,
       understandingCard: understandingCard ?? '',
-      columns,
+      columns: pipelineColumns,
       relevantColumns: plan.relevantColumns,
       intent: plan.intent,
       rowCount: rows.length,
@@ -826,7 +870,7 @@ export async function runQueryOrchestration(input: QueryOrchestrationInput): Pro
       sampleRows: rows,
     };
 
-    const explanationLabels = columnLabelsForExplanation(plan.relevantColumns, columns);
+    const explanationLabels = columnLabelsForExplanation(plan.relevantColumns, pipelineColumns);
 
     let explanation = '';
     let followUpSuggestions: string[] = [];
