@@ -34,3 +34,7 @@ Thumbs.db
 # Misc
 *.pem
 .vercel
+
+# FlowSync
+.flowsync.json
+flowsync_token.md
